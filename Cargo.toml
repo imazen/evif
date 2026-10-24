@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["evif"]
+members = ["evif", "evif-probe"]
 
 [workspace.package]
 edition = "2024"
@@ -12,3 +12,12 @@ repository = "https://github.com/imazen/evif"
 zenhash = { git = "https://github.com/imazen/zenhash", rev = "7774776d2eb7b27da06efd8e090df60fa08e9bb8", default-features = false }
 serde = { version = "1.0.229", default-features = false, features = ["derive", "alloc"] }
 serde_json = { version = "1.0.154", default-features = false, features = ["alloc"] }
+
+# Unpublished zen crates that the pinned codec mains need (copied from
+# zenjpeg a2a128ab root Cargo.toml). Swap for registry versions at release.
+[patch.crates-io]
+# Unpublished ICC recognition fix for the existing Ultra HDR corpus profile.
+zenpixels = { git = "https://github.com/imazen/zenpixels", rev = "1d3ddd2131b22e9e3754c765d4ce45ce3901de59" }
+zenpixels-convert = { git = "https://github.com/imazen/zenpixels", rev = "1d3ddd2131b22e9e3754c765d4ce45ce3901de59" }
+zencodec = { git = "https://github.com/imazen/zencodec", rev = "d327434b0826a3e39633665c76f5081c0ceb34cc" }
+zenanalyze = { git = "https://github.com/imazen/zenanalyze", rev = "8ca647c525cf488c61bbf35475ca8ba3db6b628e" }

@@ -1,0 +1,135 @@
+# EVIF, the evil image format [![CI](https://img.shields.io/github/actions/workflow/status/imazen/evif/ci.yml?style=flat-square&label=CI)](https://github.com/imazen/evif/actions/workflows/ci.yml) [![crates.io](https://img.shields.io/crates/v/evif?style=flat-square)](https://crates.io/crates/evif) [![lib.rs](https://img.shields.io/crates/v/evif?style=flat-square&label=lib.rs&color=blue)](https://lib.rs/crates/evif) [![docs.rs](https://img.shields.io/docsrs/evif?style=flat-square)](https://docs.rs/evif) [![license](https://img.shields.io/crates/l/evif?style=flat-square)](#license)
+
+<p align="center"><img src="logo.svg" width="220" alt="A ghostly image file with two glowing eyes"></p>
+
+**An image format that confesses.**
+
+EVIF is a container and a probe for stress-testing image quality metrics such as
+SSIMULACRA2, butteraugli and zensim. An `.evif` file holds a distorted image made by
+pushing a real encoder's knobs where no sane encoder goes, the exact recipe, the
+lossless pixels our decoder produced from it, and the score every metric gave it.
+The file reports on itself. Anyone can re-run the judges and check the confession.
+
+It is built for perceptual-metric research: finding the encodes a metric gets wrong,
+so the metric can be fixed before an encoder is tuned against it.
+
+## Why another IQA dataset
+
+Fixed datasets (KADID-10k, TID2013, KADIS-700k) measure whether a metric ranks common
+distortions the way people do. They say nothing about what an optimizer finds when it
+pushes against the metric, and that is how metrics are actually used: inside encoder
+tuning, rate-distortion search and codec pickers. A metric with 0.95 SROCC on KADID
+can still have a cheap exploit, and an encoder tuned against it will find that exploit.
+
+Maximum-differentiation competition (Wang & Simoncelli, 2008; gMAD, Ma et al., 2016)
+answers this by holding one metric's score fixed and pushing another as far as it
+will go, then asking a person which metric was right. EVIF runs that search over
+codec parameters instead of pixel gradients, so every finding is a bitstream a real
+decoder reads and a file size that is real. Pixel-space attacks produce noise no
+encoder would emit; a quantization table a metric overrates is one an encoder can
+actually ship.
+
+## How the probe works
+
+For each reference image and one *stress family* (a codec with its full parameter
+vector exposed):
+
+1. **Honest curve.** The family's default encoder is swept over quality to give a
+   rate-distortion curve for every score key.
+2. **Samples.** Parameter vectors are drawn at random: per-component, per-band
+   quantization multipliers, zero-bias, chroma subsampling, adaptive quantization,
+   deringing, trellis. Each is encoded, decoded by our decoder and scored by every
+   judge.
+3. **Gain at matched bitrate.** A sample's gain on a key is its score minus the honest
+   curve at the same interior bits per pixel, in units of that key's span over the
+   curve. `+0.10` means a tenth of the distance between the worst and best honest
+   encode, for the same bytes.
+4. **Disagreement.** The target metric's gain minus the mean of the others'. The most
+   disagreeing samples are written as `.evif` files, and every sample goes into a TSV
+   ledger.
+
+Disagreement is not ground truth: it says the metrics differ, not which one is wrong.
+The written files are the pairs worth showing to people. Random search is a floor; a
+proper optimizer over the same families comes next.
+
+## Quick start
+
+```sh
+cargo build --release
+target/release/evif list
+target/release/evif probe --family zenjpeg-expert --target ssim2 \
+    --out out/ssim2 --samples 256 --keep 8 corpus/*.png
+target/release/evif inspect out/ssim2/<image>/zenjpeg-expert-017.evif
+target/release/evif verify  out/ssim2/*/*.evif        # SEAL, PNG, pixel digest
+target/release/evif extract out/ssim2/<image>/zenjpeg-expert-017.evif unpacked/
+```
+
+`inspect` prints what the file says about itself:
+
+```
+  576x576 Rgb U8
+  bitstream: jpeg 11078 bytes
+  interior bpp: 0.2671
+  recipe: zenjpeg-expert via zenjpeg 0.9.0 (a2a128ab)
+  target: ssim2
+  params: {"quality":28.58,"subsampling":"s420","quant_scale":[[0.43,5.75,0.45,0.39], ...
+  zensim                    33.4352  (Higher, zensim@2b840717)
+  ssim2                     36.5072  (Higher, fast-ssim2@54fabca9)
+  butteraugli               10.7743  (Lower, butteraugli@02b570b4)
+  butteraugli/3-norm         3.7792  (Lower, butteraugli@02b570b4)
+  disagreement: 0.365
+```
+
+`extract` writes the interior `.jpeg` (any decoder can open it), the `.png` rendition
+the metrics scored, and the scores as JSON.
+
+## What is in the coffin
+
+| chunk | holds |
+|---|---|
+| `HEAD` | dimensions, channel layout, sample type |
+| `BITS` | the interior bitstream, byte for byte, with its codec tag; **interior bpp counts only this** |
+| `PIXL` | a lossless PNG of what *our* decoder produced, so people see exactly what the metrics saw |
+| `DIGS` | XXH3-64 digests of the distorted and reference rasters, after IMI's `pSUM` design |
+| `clam` | the size a synthetic distortion pretends to cost |
+| `srce` `knob` `scor` | source id, the recipe (family, codec, commit, parameters, target), and every score with metric, variant, version and implementation |
+| `SEAL` | XXH3-64 of the whole file before it |
+
+Tag case follows PNG: an upper-case first letter is critical, lower case is ancillary.
+The byte layout is in [SPEC.md](SPEC.md).
+
+Studies serve the `PIXL` rendition, not the interior bitstream: a browser's own JPEG
+or AV1 decoder can differ from ours in IDCT, chroma upsampling or film grain, and the
+scores belong to our decoder's pixels.
+
+## Families and judges
+
+| family | what it varies |
+|---|---|
+| `zenjpeg-expert` | zenjpeg's `ExpertConfig`: 3×4 quant multipliers (component × DC/low/mid/high band), zero-bias, 4:4:4/4:2:2/4:4:0/4:2:0, AQ, deringing, trellis |
+| `corruption` | the structural defects of [corruption-corpus](https://github.com/imazen/codec-corpus): channel swaps, dropped blocks, off-by-one edges, wrong-phase chroma, real decoder bugs; pixels only, no bitstream |
+
+| judge | keys |
+|---|---|
+| zensim | `zensim` (current codec-target profile) |
+| fast-ssim2 | `ssim2` |
+| butteraugli | `butteraugli` (max norm), `butteraugli/3-norm` |
+
+Judges are pinned to specific revisions ([`evif-probe/src/pins.rs`](evif-probe/src/pins.rs)),
+and every score row names the implementation that produced it.
+
+Coming: zenwebp, zenjxl, zenavif and IMI families; a post-filter family with no rate
+constraint (sharpening, grain, hue, sub-pixel shift); more judges through a companion
+crate; a human-judgment loop.
+
+## Crates
+
+- **`evif`**: the container. `no_std` + `alloc`, `#![forbid(unsafe_code)]`, reads and
+  writes files and computes digests; decodes no image codec. MIT OR Apache-2.0.
+- **`evif-probe`**: families, judges, the search and the `evif` CLI. Links the zen
+  codecs and metrics at pinned revisions. AGPL-3.0 OR commercial, not published.
+
+## License
+
+`evif` is dual-licensed under MIT and Apache-2.0. `evif-probe` is AGPL-3.0-only or
+the Imazen commercial license (see `evif-probe/LICENSE-*`).

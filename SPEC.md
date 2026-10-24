@@ -146,7 +146,7 @@ UTF-8 JSON objects. Unknown fields are ignored.
 }
 ```
 
-`target` names the metric the recipe tried to fool, if any.
+`target` names the metric the search optimized for, if any.
 
 `scor`: `{"scores": [row, ...]}` with each row
 

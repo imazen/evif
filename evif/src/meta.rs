@@ -28,7 +28,7 @@ pub struct Source {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct Recipe {
-    /// Curse family, such as `"zenjpeg-quant"`.
+    /// Stress family that produced this file, such as `"zenjpeg-expert"`.
     pub family: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub codec: Option<String>,
@@ -36,7 +36,7 @@ pub struct Recipe {
     pub codec_version: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub codec_commit: Option<String>,
-    /// The metric this recipe tried to fool, if any.
+    /// The metric the search optimized for, if any.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target: Option<String>,
     #[serde(default)]

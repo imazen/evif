@@ -1,0 +1,34 @@
+[package]
+name = "evif-probe"
+version = "0.0.1"
+description = "Stress families, metric judges and a matched-bitrate disagreement search that write EVIF files"
+license = "AGPL-3.0-only OR LicenseRef-Imazen-Commercial"
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+
+[[bin]]
+name = "evif"
+path = "src/main.rs"
+
+[dependencies]
+evif = { path = "../evif" }
+# Codecs and metrics are pinned to main revisions; `src/pins.rs` records the
+# same revisions for the `scor` and `knob` chunks. Update both together.
+zenjpeg = { git = "https://github.com/imazen/zenjpeg", rev = "a2a128ab0bc36f01338225f61c285f462ae67ca6" }
+zenpng = { git = "https://github.com/imazen/zenpng", rev = "2802f8ee9ae5444b61c4b8f9da51645365bb1fd5", default-features = false }
+zensim = { git = "https://github.com/imazen/zensim", rev = "2b84071712ef86bc95f7fdfc0b14b7ee14d2aaeb" }
+fast-ssim2 = { git = "https://github.com/imazen/fast-ssim2", rev = "54fabca919230767ba0944cbec0a37d7eb3a2a7a" }
+butteraugli = { git = "https://github.com/imazen/butteraugli", rev = "02b570b490dda0f2593aca99260ed34ab062d5b3" }
+corruption-corpus = { git = "https://github.com/imazen/codec-corpus", rev = "ac980c295cb62c925d03d47990925d49c36eef18" }
+zenpixels-convert = { git = "https://github.com/imazen/zenpixels", rev = "1d3ddd2131b22e9e3754c765d4ce45ce3901de59", features = ["rgb"] }
+imgref = "1.12.3"
+rgb = "0.8.53"
+enough = "0.4.5"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+zenhash = { git = "https://github.com/imazen/zenhash", rev = "7774776d2eb7b27da06efd8e090df60fa08e9bb8", version = "0.1.0" }
+
+[lints.rust]
+unsafe_code = "forbid"
