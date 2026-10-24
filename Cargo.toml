@@ -1,0 +1,14 @@
+[workspace]
+resolver = "3"
+members = ["evif"]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.89"
+repository = "https://github.com/imazen/evif"
+
+[workspace.dependencies]
+# Git pin until zenhash 0.1.0 is on crates.io.
+zenhash = { git = "https://github.com/imazen/zenhash", rev = "7774776d2eb7b27da06efd8e090df60fa08e9bb8", default-features = false }
+serde = { version = "1.0.229", default-features = false, features = ["derive", "alloc"] }
+serde_json = { version = "1.0.154", default-features = false, features = ["alloc"] }

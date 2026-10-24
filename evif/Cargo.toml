@@ -1,0 +1,26 @@
+[package]
+name = "evif"
+version = "0.0.1"
+description = "EVIF, the evil image format: a self-reporting container for image-quality-metric stress tests"
+license = "MIT OR Apache-2.0"
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+keywords = ["image", "iqa", "metric", "adversarial", "container"]
+categories = ["multimedia::images", "development-tools::testing"]
+
+[features]
+default = ["std"]
+std = ["zenhash/std", "serde/std", "serde_json/std"]
+
+[dependencies]
+zenhash.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[dev-dependencies]
+# Independent XXH3 implementation to cross-check digests.
+xxhash-rust = { version = "0.8.19", features = ["xxh3"] }
