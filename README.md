@@ -107,6 +107,8 @@ scores belong to our decoder's pixels.
 | family | what it varies |
 |---|---|
 | `zenjpeg-expert` | zenjpeg's `ExpertConfig`: 3×4 quant multipliers (component × DC/low/mid/high band), zero-bias, 4:4:4/4:2:2/4:4:0/4:2:0, AQ, deringing, trellis |
+| `zenjpeg-color` | zenjpeg's color pipeline: YCbCr / XYB / RGB passthrough, jpegli chroma distance scales or mozjpeg chroma quality, gamma-aware chroma downsampling, deringing, AQ, auto-optimize |
+| `zenpng-palette` | lossy PNG through zenpng + zenquant: palette size 2–256, quality preset, six dither modes and strength, Viterbi run weight |
 | `corruption` | the structural defects of [corruption-corpus](https://github.com/imazen/codec-corpus): channel swaps, dropped blocks, off-by-one edges, wrong-phase chroma, real decoder bugs; pixels only, no bitstream |
 
 | judge | keys |
@@ -118,9 +120,12 @@ scores belong to our decoder's pixels.
 Judges are pinned to specific revisions ([`evif-probe/src/pins.rs`](evif-probe/src/pins.rs)),
 and every score row names the implementation that produced it.
 
-Coming: zenwebp, zenjxl, zenavif and IMI families; a post-filter family with no rate
-constraint (sharpening, grain, hue, sub-pixel shift); more judges through a companion
-crate; a human-judgment loop.
+Families and judges are plug-ins: `evif_probe::registry::Registry` holds the built-in
+set, and a companion binary can add its own and reuse the CLI (`evif_probe::cli::main`).
+That is how families and judges built on unpublished code join the same runs.
+
+Coming: zenwebp, zenjxl and zenavif families; a post-filter family with no rate
+constraint (sharpening, grain, hue, sub-pixel shift); a human-judgment loop.
 
 ## Crates
 

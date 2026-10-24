@@ -121,18 +121,6 @@ impl Judge for Butteraugli {
     }
 }
 
-/// Every judge this binary knows, by name.
-pub fn by_name(name: &str) -> Option<Box<dyn Judge>> {
-    Some(match name {
-        "zensim" => Box::new(Zensim::new()),
-        "ssim2" => Box::new(Ssim2),
-        "butteraugli" => Box::new(Butteraugli),
-        _ => return None,
-    })
-}
-
-pub const ALL: &[&str] = &["zensim", "ssim2", "butteraugli"];
-
 /// Score keys of a judge list, in order.
 pub fn keys(judges: &[Box<dyn Judge>]) -> Vec<String> {
     judges.iter().flat_map(|j| j.keys()).collect()

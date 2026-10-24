@@ -159,19 +159,37 @@ impl Setup<'_> {
         })
     }
 
-    /// Draw and evaluate `count` samples.
+    /// Draw and evaluate `count` encodable samples. A parameter vector the
+    /// family refuses is reported to `on_skip` and replaced by a fresh draw;
+    /// more refusals than four times `count` is an error, since the family
+    /// is then sampling outside what it can encode.
     pub fn run(
         &self,
         rng: &mut Rng,
         count: usize,
         mut on_sample: impl FnMut(usize, &Sample, &Encoded),
+        mut on_skip: impl FnMut(usize, &str),
     ) -> Res<Vec<(Sample, Encoded)>> {
         let mut out = Vec::with_capacity(count);
-        for i in 0..count {
+        let mut skipped = 0usize;
+        while out.len() < count {
             let params = self.family.sample(rng, self.reference);
-            let enc = self.family.encode(&params, self.reference)?;
+            let enc = match self.family.encode(&params, self.reference) {
+                Ok(enc) => enc,
+                Err(why) => {
+                    skipped += 1;
+                    on_skip(out.len(), &why);
+                    if skipped > count * 4 {
+                        return Err(format!(
+                            "{} refused {skipped} parameter vectors for {count} samples; last: {why}",
+                            self.family.name()
+                        ));
+                    }
+                    continue;
+                }
+            };
             let sample = self.evaluate(params, &enc)?;
-            on_sample(i, &sample, &enc);
+            on_sample(out.len(), &sample, &enc);
             out.push((sample, enc));
         }
         Ok(out)

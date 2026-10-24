@@ -10,10 +10,18 @@ pub struct Pin {
 }
 
 impl Pin {
+    /// `name@<8-char commit>`, or `name@<version>` for a crates.io release.
     pub fn implementation(&self, name: &str) -> String {
-        format!("{name}@{}", &self.commit[..8])
+        if self.commit == REGISTRY {
+            format!("{name}@{}", self.version)
+        } else {
+            format!("{name}@{}", &self.commit[..8])
+        }
     }
 }
+
+/// Marker commit for a dependency taken from crates.io at an exact version.
+pub const REGISTRY: &str = "crates.io";
 
 pub const ZENJPEG: Pin = Pin {
     version: "0.9.0",
@@ -34,4 +42,12 @@ pub const BUTTERAUGLI: Pin = Pin {
 pub const CORRUPTION_CORPUS: Pin = Pin {
     version: "0.1.0",
     commit: "ac980c295cb62c925d03d47990925d49c36eef18",
+};
+pub const ZENPNG: Pin = Pin {
+    version: "0.2.0",
+    commit: "2802f8ee9ae5444b61c4b8f9da51645365bb1fd5",
+};
+pub const ZENQUANT: Pin = Pin {
+    version: "0.1.3",
+    commit: REGISTRY,
 };

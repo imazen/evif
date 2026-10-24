@@ -3,10 +3,12 @@
 
 #![forbid(unsafe_code)]
 
+pub mod cli;
 pub mod family;
 pub mod image;
 pub mod judge;
 pub mod pins;
+pub mod registry;
 pub mod rng;
 pub mod search;
 pub mod write;

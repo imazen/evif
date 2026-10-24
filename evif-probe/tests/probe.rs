@@ -6,6 +6,7 @@ use evif::{Bpp, Evif};
 use evif_probe::family;
 use evif_probe::image::Rgb8Image;
 use evif_probe::judge;
+use evif_probe::registry::Registry;
 use evif_probe::rng::Rng;
 use evif_probe::search::{self, Baseline};
 use evif_probe::write;
@@ -29,10 +30,7 @@ fn reference() -> Rgb8Image {
 }
 
 fn judges() -> Vec<Box<dyn judge::Judge>> {
-    judge::ALL
-        .iter()
-        .map(|n| judge::by_name(n).unwrap())
-        .collect()
+    Registry::builtin().all_judges()
 }
 
 fn check_file(bytes: &[u8], reference: &Rgb8Image, expect_bits: bool) -> Evif {
@@ -56,7 +54,7 @@ fn check_file(bytes: &[u8], reference: &Rgb8Image, expect_bits: bool) -> Evif {
 #[test]
 fn zenjpeg_expert_round_trip() {
     let reference = reference();
-    let fam = family::by_name("zenjpeg-expert").unwrap();
+    let fam = Registry::builtin().family("zenjpeg-expert").unwrap();
     let judges = judges();
     let baseline = Baseline::build(fam.as_ref(), &judges, &reference, &[20.0, 50.0, 80.0])
         .unwrap()
@@ -76,7 +74,7 @@ fn zenjpeg_expert_round_trip() {
         reference: &reference,
         target: "ssim2",
     };
-    let results = setup.run(&mut rng, 3, |_, _, _| {}).unwrap();
+    let results = setup.run(&mut rng, 3, |_, _, _| {}, |_, _| {}).unwrap();
     for (sample, enc) in &results {
         assert!(sample.disagreement.is_some());
         assert_eq!(sample.gain.len(), 4);
@@ -113,7 +111,7 @@ fn zenjpeg_expert_round_trip() {
 #[test]
 fn corruption_round_trip() {
     let reference = reference();
-    let fam = family::by_name("corruption").unwrap();
+    let fam = Registry::builtin().family("corruption").unwrap();
     let judges = judges();
     assert!(
         Baseline::build(fam.as_ref(), &judges, &reference, &[50.0])
@@ -144,10 +142,69 @@ fn corruption_round_trip() {
 #[test]
 fn seeded_runs_repeat() {
     let reference = reference();
-    let fam = family::by_name("zenjpeg-expert").unwrap();
+    let fam = Registry::builtin().family("zenjpeg-expert").unwrap();
     let a = fam.sample(&mut Rng::for_key(9, "img"), &reference);
     let b = fam.sample(&mut Rng::for_key(9, "img"), &reference);
     let c = fam.sample(&mut Rng::for_key(9, "other"), &reference);
     assert_eq!(a, b);
     assert_ne!(a, c);
+}
+
+/// Every codec family: a baseline sweep rises in bpp, samples encode and
+/// write files whose recipes reproduce their bitstreams.
+#[test]
+fn every_codec_family_round_trips() {
+    let reference = reference();
+    let reg = Registry::builtin();
+    let judges = judges();
+    for name in ["zenjpeg-color", "zenpng-palette"] {
+        let fam = reg.family(name).unwrap();
+        let baseline = Baseline::build(fam.as_ref(), &judges, &reference, &[10.0, 50.0, 90.0])
+            .unwrap()
+            .unwrap_or_else(|| panic!("{name} has a baseline"));
+        let bpps: Vec<f64> = baseline.points().iter().map(|p| p.0).collect();
+        assert!(
+            bpps.windows(2).all(|w| w[0] < w[1]),
+            "{name} bpp rises: {bpps:?}"
+        );
+        let setup = search::Setup {
+            family: fam.as_ref(),
+            judges: &judges,
+            baseline: Some(&baseline),
+            reference: &reference,
+            target: "zensim",
+        };
+        let mut skipped = 0;
+        let results = setup
+            .run(
+                &mut Rng::for_key(5, name),
+                4,
+                |_, _, _| {},
+                |_, _| skipped += 1,
+            )
+            .unwrap();
+        assert_eq!(results.len(), 4);
+        for (sample, enc) in &results {
+            let file = write::build(
+                fam.as_ref(),
+                &reference,
+                "synthetic",
+                Some("zensim"),
+                sample,
+                enc,
+            )
+            .unwrap();
+            let back = check_file(&file.to_bytes().unwrap(), &reference, true);
+            let bits = back.bits.unwrap();
+            let again = fam
+                .encode(&back.recipe.unwrap().params, &reference)
+                .unwrap();
+            assert_eq!(
+                again.bits.unwrap().data,
+                bits.data,
+                "{name} recipe reproduces bytes"
+            );
+        }
+        eprintln!("{name}: {skipped} skipped");
+    }
 }

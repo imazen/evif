@@ -24,6 +24,15 @@ All notable changes to this repository. Format: [Keep a Changelog](https://keepa
 - `zenjpeg-expert` family over zenjpeg's `ExpertConfig` (per-component, per-band quant
   multipliers, zero-bias, subsampling, AQ, deringing, trellis) and the `corruption`
   family from corruption-corpus.
+- `zenjpeg-color` family (YCbCr/XYB/RGB paths, jpegli chroma distance scales, mozjpeg
+  chroma quality, gamma-aware downsampling) and `zenpng-palette` (zenpng indexed output
+  from zenquant: palette size, preset, dither mode and strength, Viterbi weight).
+- `Registry` of families and judges, and `cli::main(&Registry)`, so a companion crate
+  can add families and judges built on unpublished code and reuse the CLI.
+- The search skips parameter vectors a family refuses and reports them.
+- butteraugli is linked without `rayon`, so no thread pool takes part in a score.
+- The container parses JSON floats exactly (`serde_json/float_roundtrip`): the default
+  parser returned a value one ulp off, and re-scoring a file then failed to match.
 - Judges: zensim (codec-target profile), fast-ssim2, butteraugli (max norm, 3-norm),
   pinned to revisions recorded in every file.
 - Matched-bitrate disagreement search: honest baseline curve per image, gains in

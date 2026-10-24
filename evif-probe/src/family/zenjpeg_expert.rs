@@ -9,10 +9,9 @@ use enough::Unstoppable;
 use evif::Bitstream;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use zenjpeg::decoder::Decoder;
 use zenjpeg::encoder::{ChromaSubsampling, ColorMode, ExpertConfig, PixelLayout};
 
-use super::{Encoded, Family, Subsampling};
+use super::{Encoded, Family, Subsampling, decode_jpeg};
 use crate::image::Rgb8Image;
 use crate::rng::Rng;
 use crate::{Res, pins};
@@ -158,20 +157,7 @@ impl Family for ZenjpegExpert {
             .map_err(|e| format!("zenjpeg encode: {e}"))?;
         let jpeg = enc.finish().map_err(|e| format!("zenjpeg finish: {e}"))?;
 
-        let dec = Decoder::new()
-            .decode(&jpeg, Unstoppable)
-            .map_err(|e| format!("zenjpeg decode: {e}"))?;
-        let (w, h) = dec.dimensions();
-        let px = dec
-            .pixels_u8()
-            .ok_or("zenjpeg decode produced no u8 pixels")?;
-        if (w, h) != (reference.width, reference.height) {
-            return Err(format!(
-                "decoded {w}x{h}, reference {}x{}",
-                reference.width, reference.height
-            ));
-        }
-        let pixels = Rgb8Image::new(w, h, px.to_vec())?;
+        let pixels = decode_jpeg(&jpeg, reference)?;
         Ok(Encoded {
             bits: Some(Bitstream {
                 codec: *b"jpeg",
