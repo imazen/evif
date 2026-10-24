@@ -35,3 +35,9 @@ smoke: build
 probe family target dir out samples='256':
     {{heavy}} target/release/evif probe --family {{family}} --target {{target}} \
         --out {{out}} --samples {{samples}} {{dir}}/*.png
+
+# Stage the static site as Pages deploys it (index.html and logo.svg side by side).
+site:
+    rm -rf out/site && mkdir -p out/site
+    cp site/* out/site/ && cp logo.svg out/site/
+    @echo "open out/site/index.html"
