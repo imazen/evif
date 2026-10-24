@@ -184,7 +184,7 @@ fn u16_digest_is_little_endian_and_crosses_buffer_boundaries() {
     let (w, h) = (300u32, 3u32);
     let row = w as usize * 3;
     let px: Vec<u16> = (0..row * h as usize)
-        .map(|i| (i * 2654435761usize) as u16)
+        .map(|i| (i as u64).wrapping_mul(2654435761) as u16)
         .collect();
     let mut expect = descriptor(w, h, 3, 2);
     for s in &px {
