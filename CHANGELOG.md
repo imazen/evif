@@ -35,7 +35,8 @@ All notable changes to this repository. Format: [Keep a Changelog](https://keepa
   parser returned a value one ulp off, and re-scoring a file then failed to match.
 - Judges: zensim (codec-target profile), fast-ssim2, butteraugli (max norm, 3-norm),
   pinned to revisions recorded in every file.
-- Matched-bitrate disagreement search: honest baseline curve per image, gains in
-  baseline-span units, disagreement = target gain minus mean judge gain.
+- Matched-bitrate disagreement search: honest baseline curve per image; each score is
+  mapped to the bpp an honest encode would need for it, gain = log2(equivalent bpp /
+  actual bpp), disagreement = target gain minus mean judge gain.
 - `evif` CLI: `probe`, `inspect`, `verify`, `extract`, `list`; TSV ledger and
   `summary.md` per run.

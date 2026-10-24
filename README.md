@@ -40,13 +40,16 @@ vector exposed):
    quantization multipliers, zero-bias, chroma subsampling, adaptive quantization,
    deringing, trellis. Each is encoded, decoded by our decoder and scored by every
    judge.
-3. **Gain at matched bitrate.** A sample's gain on a key is its score minus the honest
-   curve at the same interior bits per pixel, in units of that key's span over the
-   curve. `+0.10` means a tenth of the distance between the worst and best honest
-   encode, for the same bytes.
-4. **Disagreement.** The target metric's gain minus the mean of the others'. The most
-   disagreeing samples are written as `.evif` files, and every sample goes into a TSV
-   ledger.
+3. **Equivalent bitrate.** Each key's score is read back through the honest curve
+   into the bits per pixel an honest encode would need to score the same. The gain
+   on a key is `log2(equivalent bpp / actual bpp)`: `+1` means the metric rates the
+   encode like an honest file twice its size, `-1` like one half its size. Outside
+   the swept range the equivalent clamps to the curve's ends, so a wrecked encode
+   reads the same in every metric instead of being amplified by the metric with the
+   narrowest scale.
+4. **Disagreement.** The target metric's gain minus the mean of the others', in the
+   same log2-bytes unit. The most disagreeing samples are written as `.evif` files,
+   and every sample goes into a TSV ledger.
 
 Disagreement is not ground truth: it says the metrics differ, not which one is wrong.
 The written files are the pairs worth showing to people. Random search is a floor; a
@@ -64,20 +67,22 @@ target/release/evif verify  out/ssim2/*/*.evif        # SEAL, PNG, pixel digest
 target/release/evif extract out/ssim2/<image>/zenjpeg-expert-017.evif unpacked/
 ```
 
-`inspect` prints what the file says about itself:
+`inspect` prints what the file says about itself (a real file from a 24-sample run):
 
 ```
-  576x576 Rgb U8
-  bitstream: jpeg 11078 bytes
-  interior bpp: 0.2671
-  recipe: zenjpeg-expert via zenjpeg 0.9.0 (a2a128ab)
+  1356x1132 Rgb U8
+  bitstream: jpeg 29494 bytes
+  interior bpp: 0.1537
+  recipe: zenjpeg-color via zenjpeg 0.9.0 (a2a128ab)
   target: ssim2
-  params: {"quality":28.58,"subsampling":"s420","quant_scale":[[0.43,5.75,0.45,0.39], ...
-  zensim                    33.4352  (Higher, zensim@2b840717)
-  ssim2                     36.5072  (Higher, fast-ssim2@54fabca9)
-  butteraugli               10.7743  (Lower, butteraugli@02b570b4)
-  butteraugli/3-norm         3.7792  (Lower, butteraugli@02b570b4)
-  disagreement: 0.365
+  params: {"color":{"path":"ycbcr","subsampling":"s422"},"quality":36.77,
+           "tables":{"family":"jpegli_shared","chroma_scales":[0.113,2.180]}, ...}
+  zensim                    65.5594  (Higher, zensim@2b840717)
+  ssim2                     62.1959  (Higher, fast-ssim2@54fabca9)
+  butteraugli               18.2428  (Lower, butteraugli@02b570b4)
+  butteraugli/3-norm         4.8084  (Lower, butteraugli@02b570b4)
+  disagreement: 0.0797
+  gain_vs_baseline: {"ssim2":-0.897,"zensim":-0.751,"butteraugli":-1.090, ...}
 ```
 
 `extract` writes the interior `.jpeg` (any decoder can open it), the `.png` rendition

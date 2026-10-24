@@ -2,12 +2,15 @@
 //!
 //! For each reference the family's honest baseline is swept over quality to
 //! give a rate-distortion curve per score key. Every sampled parameter vector
-//! is then scored, and its gain on each key is its score minus the baseline
-//! curve's value at the same bits per pixel, in units of that key's baseline
-//! range (so a gain of 0.1 means a tenth of the span between the worst and
-//! best honest encode). The target's gain minus the mean judge gain is the
-//! disagreement: how much the target likes this encode more than the others
-//! do, for the bytes it costs.
+//! is then scored, and each key's score is read back through that curve into
+//! the bits per pixel an honest encode would need to score the same: the
+//! encode's *equivalent bpp* in that metric's eyes. The gain on a key is
+//! `log2(equivalent bpp / actual bpp)`: +1 means the metric rates the encode
+//! like an honest file twice its size, -1 like one half its size. Outside the
+//! swept range the equivalent clamps to the curve's ends, so a catastrophic
+//! encode scores the same in every metric instead of being amplified by the
+//! metric with the narrowest range. The target's gain minus the mean judge
+//! gain is the disagreement, in the same log2-bytes unit.
 //!
 //! This is the maximum-differentiation idea (Wang & Simoncelli 2008) run as
 //! a black-box search over codec knobs instead of pixel gradients.
@@ -28,8 +31,8 @@ pub struct Sample {
     pub params: serde_json::Value,
     pub bpp: Option<f64>,
     pub scores: Vec<Score>,
-    /// Gain per score key against the baseline curve at this bpp, in units
-    /// of the key's baseline range. Empty when there is no baseline.
+    /// Per score key, `log2(equivalent bpp / actual bpp)` against the
+    /// baseline curve. Empty when there is no baseline.
     pub gain: BTreeMap<String, f64>,
     pub disagreement: Option<f64>,
 }
@@ -98,6 +101,43 @@ impl Baseline {
         (hi > lo).then(|| hi - lo)
     }
 
+    /// The bpp at which the honest curve reaches `value` on `key`, by linear
+    /// interpolation on the first segment that crosses it; clamped to the
+    /// curve's ends when the value lies outside everything the sweep reached.
+    /// `better` says which way along the curve "more similar" lies, so a
+    /// value past the best honest score maps to the largest bpp whichever
+    /// direction the key runs.
+    pub fn equivalent_bpp(&self, key: &str, value: f64, better: evif::Better) -> Option<f64> {
+        let first = self.points.first()?;
+        let last = self.points.last()?;
+        let (v_first, v_last) = (*first.1.get(key)?, *last.1.get(key)?);
+        // Orient so that `more` means more similar.
+        let more = |a: f64, b: f64| match better {
+            evif::Better::Higher => a > b,
+            evif::Better::Lower => a < b,
+        };
+        if more(value, v_last) || value == v_last {
+            return Some(last.0);
+        }
+        if more(v_first, value) || value == v_first {
+            return Some(first.0);
+        }
+        for w in self.points.windows(2) {
+            let (b0, v0) = (w[0].0, *w[0].1.get(key)?);
+            let (b1, v1) = (w[1].0, *w[1].1.get(key)?);
+            let between = (v0 <= value && value <= v1) || (v1 <= value && value <= v0);
+            if between && v1 != v0 {
+                return Some(b0 + (b1 - b0) * (value - v0) / (v1 - v0));
+            }
+        }
+        // The curve is not monotone and no segment crosses: nearest end.
+        Some(if (value - v_first).abs() < (value - v_last).abs() {
+            first.0
+        } else {
+            last.0
+        })
+    }
+
     pub fn points(&self) -> &[(f64, BTreeMap<String, f64>)] {
         &self.points
     }
@@ -107,14 +147,10 @@ pub fn by_key(scores: &[Score]) -> BTreeMap<String, f64> {
     scores.iter().map(|s| (s.key(), s.value)).collect()
 }
 
-/// Signed gain in the "more similar" direction.
-fn signed(score: &Score, baseline: f64, span: f64) -> f64 {
-    let d = score.value - baseline;
-    let d = match score.better {
-        evif::Better::Higher => d,
-        evif::Better::Lower => -d,
-    };
-    d / span
+/// `log2(equivalent bpp / actual bpp)` for one score.
+fn gain(baseline: &Baseline, score: &Score, bpp: f64) -> Option<f64> {
+    let eq = baseline.equivalent_bpp(&score.key(), score.value, score.better)?;
+    (eq > 0.0 && bpp > 0.0).then(|| (eq / bpp).log2())
 }
 
 /// Everything a search needs besides the random stream: one reference, the
@@ -133,17 +169,16 @@ impl Setup<'_> {
     pub fn evaluate(&self, params: serde_json::Value, enc: &Encoded) -> Res<Sample> {
         let scores = judge::score_all(self.judges, self.reference, &enc.pixels)?;
         let bpp = enc.bpp();
-        let mut gain = BTreeMap::new();
+        let mut gains = BTreeMap::new();
         if let (Some(b), Some(bpp)) = (self.baseline, bpp) {
             for s in &scores {
-                let key = s.key();
-                if let (Some(base), Some(span)) = (b.at(&key, bpp), b.span(&key)) {
-                    gain.insert(key, signed(s, base, span));
+                if let Some(g) = gain(b, s, bpp) {
+                    gains.insert(s.key(), g);
                 }
             }
         }
-        let disagreement = gain.get(self.target).and_then(|t| {
-            let others: Vec<f64> = gain
+        let disagreement = gains.get(self.target).and_then(|t| {
+            let others: Vec<f64> = gains
                 .iter()
                 .filter(|(k, _)| k.as_str() != self.target)
                 .map(|(_, v)| *v)
@@ -154,7 +189,7 @@ impl Setup<'_> {
             params,
             bpp,
             scores,
-            gain,
+            gain: gains,
             disagreement,
         })
     }

@@ -334,7 +334,7 @@ fn probe(registry: &Registry, args: &[String]) -> Res<()> {
         a.target,
         a.judges.join(", ")
     ));
-    md.push_str("Gains are score minus the honest baseline at the same bpp, in units of that key's baseline span. Disagreement is the target's gain minus the mean of the others'.\n\n");
+    md.push_str("Gain per key is log2(equivalent bpp / actual bpp): the bpp an honest encode would need to reach this score, over the bytes actually spent. +1 means the metric rates the encode like an honest file twice its size. Disagreement is the target's gain minus the mean of the others'.\n\n");
     md.push_str("| image | file | bpp | disagreement |");
     for k in &keys {
         md.push_str(&format!(" {k} | gain |"));

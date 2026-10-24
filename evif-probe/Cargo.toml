@@ -24,7 +24,9 @@ fast-ssim2 = { git = "https://github.com/imazen/fast-ssim2", rev = "54fabca91923
 # depend on pixels alone.
 butteraugli = { git = "https://github.com/imazen/butteraugli", rev = "02b570b490dda0f2593aca99260ed34ab062d5b3", default-features = false, features = ["avx512"] }
 corruption-corpus = { git = "https://github.com/imazen/codec-corpus", rev = "ac980c295cb62c925d03d47990925d49c36eef18" }
-zenpixels-convert = { git = "https://github.com/imazen/zenpixels", rev = "1d3ddd2131b22e9e3754c765d4ce45ce3901de59", features = ["rgb"] }
+# Registry requirement so the workspace patch (and a companion workspace's own
+# patch) decides the one zenpixels-convert every crate sees.
+zenpixels-convert = { version = "0.2.16", features = ["rgb"] }
 zenquant = "0.1.3"
 imgref = "1.12.3"
 rgb = "0.8.53"
