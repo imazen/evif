@@ -45,7 +45,7 @@
   <header>
     <img src="logo.svg" alt="A ghostly image file with two glowing eyes">
     <h1>EVIF, the evil image format
-      <small>An image format that confesses.</small>
+      <small>Find the images your quality metric gets wrong.</small>
     </h1>
   </header>
 
@@ -53,7 +53,7 @@
     A container and a probe for stress-testing image quality metrics such as SSIMULACRA2,
     butteraugli and zensim. An <code>.evif</code> file holds a distorted image made by pushing a
     real encoder's knobs where no sane encoder goes, the recipe, the lossless pixels our decoder
-    produced, and the score every metric gave it. Anyone can re-run the judges and check the confession.
+    produced, and the score every metric gave it. Anyone can re-run the metrics and check the recorded scores.
   </p>
 
   <h2>Why</h2>
@@ -68,7 +68,7 @@
   <div class="grid">
     <div class="card"><h3>Possess</h3><p>Take a real encoder's full parameter vector: per-band quantization, zero-bias, chroma subsampling, adaptive quantization, deringing, trellis.</p></div>
     <div class="card"><h3>Judge</h3><p>Score every sample with several metrics, each pinned to a revision, against the family's honest rate-distortion curve at the same bits per pixel.</p></div>
-    <div class="card"><h3>Confess</h3><p>Write the bitstream, the pixels, the recipe and every score into one sealed file. <code>evif verify</code> checks the pixels; <code>evif extract</code> hands the bitstream to any decoder.</p></div>
+    <div class="card"><h3>Record</h3><p>Write the bitstream, the pixels, the recipe and every score into one sealed file. <code>evif verify</code> checks the pixels; <code>evif extract</code> hands the bitstream to any decoder.</p></div>
   </div>
 
   <h2>A file speaks</h2>

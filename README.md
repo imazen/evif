@@ -2,13 +2,13 @@
 
 <p align="center"><img src="logo.svg" width="220" alt="A ghostly image file with two glowing eyes"></p>
 
-**An image format that confesses.**
+**Find the images your quality metric gets wrong.**
 
 EVIF is a container and a probe for stress-testing image quality metrics such as
 SSIMULACRA2, butteraugli and zensim. An `.evif` file holds a distorted image made by
 pushing a real encoder's knobs where no sane encoder goes, the exact recipe, the
 lossless pixels our decoder produced from it, and the score every metric gave it.
-The file reports on itself. Anyone can re-run the judges and check the confession.
+Anyone can re-run the metrics and check the recorded scores.
 
 It is built for perceptual-metric research: finding the encodes a metric gets wrong,
 so the metric can be fixed before an encoder is tuned against it.
