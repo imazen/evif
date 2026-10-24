@@ -26,6 +26,9 @@ evif: stress-test image quality metrics with a self-reporting container
   evif inspect FILE.evif...        print header, bpp, recipe and scores
   evif verify  FILE.evif...        check SEAL, PIXL decode, pixel digest
   evif extract FILE.evif DIR       write the interior bitstream and PNG
+  evif render  --family F --out DIR (--qualities 5,10,... | --params FILE.jsonl)
+               IMAGE.png...        encode with a family, write decoded PNGs and
+                                   DIR/render.tsv (image, tag, bytes, bpp, png, params)
   evif list                        families, judges and score keys";
 
 /// Run the CLI and exit with its status.
@@ -51,6 +54,7 @@ pub fn run(registry: &Registry, args: &[String]) -> Res<()> {
         Some("verify") => verify(&args[1..]),
         Some("extract") => extract(&args[1..]),
         Some("list") => list(registry),
+        Some("render") => render(registry, &args[1..]),
         _ => Err(USAGE.to_string()),
     }
 }
@@ -486,6 +490,95 @@ fn extract(args: &[String]) -> Res<()> {
         )
         .map_err(|e| format!("{}: {e}", p.display()))?;
         println!("{}", p.display());
+    }
+    Ok(())
+}
+
+/// Encode each image with explicit parameter vectors (one JSON object per
+/// line of `--params`) or the family's baseline at `--qualities`, and write
+/// the decoded renditions as PNG with a TSV of their sizes. The baseline
+/// form gives the honest rate-distortion anchor any external scorer can use.
+fn render(registry: &Registry, args: &[String]) -> Res<()> {
+    let (mut family, mut out, mut qualities, mut params_file) = (None, None, None, None);
+    let mut images = Vec::new();
+    let mut i = 0;
+    while i < args.len() {
+        let next = |i: usize| args.get(i + 1).cloned().ok_or_else(|| USAGE.to_string());
+        match args[i].as_str() {
+            "--family" => family = Some(next(i)?),
+            "--out" => out = Some(PathBuf::from(next(i)?)),
+            "--qualities" => qualities = Some(next(i)?),
+            "--params" => params_file = Some(PathBuf::from(next(i)?)),
+            a if a.starts_with("--") => return Err(USAGE.to_string()),
+            a => {
+                images.push(PathBuf::from(a));
+                i += 1;
+                continue;
+            }
+        }
+        i += 2;
+    }
+    let (Some(family), Some(out)) = (family, out) else {
+        return Err(USAGE.to_string());
+    };
+    let fam = registry
+        .family(&family)
+        .ok_or_else(|| format!("unknown family {family}"))?;
+    let mut jobs: Vec<(String, Value)> = Vec::new();
+    match (qualities, params_file) {
+        (Some(q), None) => {
+            for v in q.split(',') {
+                let q: f64 = v.trim().parse().map_err(|_| format!("bad quality {v}"))?;
+                let p = fam
+                    .baseline(q)
+                    .ok_or_else(|| format!("{family} has no baseline"))?;
+                jobs.push((format!("q{q:05.1}"), p));
+            }
+        }
+        (None, Some(f)) => {
+            let text = fs::read_to_string(&f).map_err(|e| format!("{}: {e}", f.display()))?;
+            for (n, line) in text.lines().filter(|l| !l.trim().is_empty()).enumerate() {
+                let p: Value = serde_json::from_str(line)
+                    .map_err(|e| format!("params line {}: {e}", n + 1))?;
+                jobs.push((format!("p{n:04}"), p));
+            }
+        }
+        _ => return Err(USAGE.to_string()),
+    }
+    fs::create_dir_all(&out).map_err(|e| format!("{}: {e}", out.display()))?;
+    let tsv_path = out.join("render.tsv");
+    let fresh = !tsv_path.exists();
+    let mut tsv = fs::OpenOptions::new()
+        .append(true)
+        .create(true)
+        .open(&tsv_path)
+        .map_err(|e| format!("{}: {e}", tsv_path.display()))?;
+    if fresh {
+        writeln!(tsv, "image\ttag\tbytes\tbpp\tpng\tparams").map_err(|e| e.to_string())?;
+    }
+    for img_path in &images {
+        let id = img_path
+            .file_stem()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let bytes = fs::read(img_path).map_err(|e| format!("{}: {e}", img_path.display()))?;
+        let reference = Rgb8Image::from_png(&bytes).map_err(|e| format!("{id}: {e}"))?;
+        for (tag, p) in &jobs {
+            let enc = match fam.encode(p, &reference) {
+                Ok(e) => e,
+                Err(e) => {
+                    eprintln!("{id} {tag}: refused: {e}");
+                    continue;
+                }
+            };
+            let png = out.join(format!("{id}-{family}-{tag}.png"));
+            fs::write(&png, enc.pixels.to_png()?).map_err(|e| format!("{}: {e}", png.display()))?;
+            let b = enc.bytes().map_or("nan".to_string(), |b| b.to_string());
+            let bpp = enc.bpp().map_or("nan".to_string(), |v| format!("{v:.6}"));
+            writeln!(tsv, "{id}\t{tag}\t{b}\t{bpp}\t{}\t{p}", png.display())
+                .map_err(|e| e.to_string())?;
+        }
+        eprintln!("{id}: {} renditions", jobs.len());
     }
     Ok(())
 }

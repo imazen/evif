@@ -65,6 +65,9 @@ target/release/evif probe --family zenjpeg-expert --target ssim2 \
 target/release/evif inspect out/ssim2/<image>/zenjpeg-expert-017.evif
 target/release/evif verify  out/ssim2/*/*.evif        # SEAL, PNG, pixel digest
 target/release/evif extract out/ssim2/<image>/zenjpeg-expert-017.evif unpacked/
+# Honest curve for an external scorer: decoded PNGs and render.tsv with bytes and bpp.
+target/release/evif render --family zenjpeg-expert --out out/honest \
+    --qualities 10,20,30,40,50,60,70,80,90 corpus/*.png
 ```
 
 `inspect` prints what the file says about itself (a real file from a 24-sample run):

@@ -40,3 +40,6 @@ All notable changes to this repository. Format: [Keep a Changelog](https://keepa
   actual bpp), disagreement = target gain minus mean judge gain.
 - `evif` CLI: `probe`, `inspect`, `verify`, `extract`, `list`; TSV ledger and
   `summary.md` per run.
+- `evif render`: encode images with a family at baseline qualities or explicit parameter
+  vectors and write the decoded PNGs plus a TSV of sizes, so external scorers can build
+  the honest rate-distortion curve or re-render a recorded recipe.
