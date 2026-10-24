@@ -60,6 +60,13 @@ fn baseline_and_params_render_match_direct_encodes() {
     for (row, quality) in q.iter().zip([20.0, 80.0]) {
         let enc = fam.encode(&fam.baseline(quality).unwrap(), &r).unwrap();
         assert_eq!(row[2], enc.bytes().unwrap().to_string());
+        let bitstream = out
+            .join("bitstreams")
+            .join(format!("ref-zenjpeg-expert-q{quality:05.1}.jpeg"));
+        assert_eq!(
+            fs::read(bitstream).unwrap(),
+            enc.bits.as_ref().unwrap().data
+        );
         let png = Rgb8Image::from_png(&fs::read(&row[4]).unwrap()).unwrap();
         assert_eq!(
             png.digest(),

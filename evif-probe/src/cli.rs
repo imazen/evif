@@ -573,6 +573,15 @@ fn render(registry: &Registry, args: &[String]) -> Res<()> {
             };
             let png = out.join(format!("{id}-{family}-{tag}.png"));
             fs::write(&png, enc.pixels.to_png()?).map_err(|e| format!("{}: {e}", png.display()))?;
+            if let Some(bits) = &enc.bits {
+                // A separate directory avoids colliding with the rendition when
+                // the encoded format itself is PNG.
+                let dir = out.join("bitstreams");
+                fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+                let ext = String::from_utf8_lossy(&bits.codec).trim().to_string();
+                let path = dir.join(format!("{id}-{family}-{tag}.{ext}"));
+                fs::write(&path, &bits.data).map_err(|e| format!("{}: {e}", path.display()))?;
+            }
             let b = enc.bytes().map_or("nan".to_string(), |b| b.to_string());
             let bpp = enc.bpp().map_or("nan".to_string(), |v| format!("{v:.6}"));
             writeln!(tsv, "{id}\t{tag}\t{b}\t{bpp}\t{}\t{p}", png.display())

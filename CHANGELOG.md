@@ -21,6 +21,8 @@ All notable changes to this repository. Format: [Keep a Changelog](https://keepa
 ## evif-probe
 
 ### Added
+- `evif render` also preserves original encoded bytes under `bitstreams/`,
+  using the rendition stem and the codec extension.
 - `zenjpeg-expert` family over zenjpeg's `ExpertConfig` (per-component, per-band quant
   multipliers, zero-bias, subsampling, AQ, deringing, trellis) and the `corruption`
   family from corruption-corpus.
