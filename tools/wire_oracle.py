@@ -51,7 +51,7 @@ def code(value, names):
 
 def initial_hash(a):
     assert a["profile"] == "resolved-rgb/1"
-    h = hashlib.sha256(b"EVIF/media/2\0")
+    h = hashlib.sha256(b"EVIF/media/3\0")
     h.update(bytes([1, code(a["kind"], "still sequence")]))
     h.update(struct.pack("<II", a["width"], a["height"]))
     h.update(bytes([
@@ -72,14 +72,19 @@ def initial_hash(a):
     return h
 
 
+class Xxh128(ctypes.Structure):
+    _fields_ = [("low64", ctypes.c_uint64), ("high64", ctypes.c_uint64)]
+
+
 def xxh3(data):
     library = ctypes.util.find_library("xxhash")
     if library is None:
         raise RuntimeError("decoded-sample verification requires the xxHash shared library")
-    function = ctypes.CDLL(library).XXH3_64bits
+    function = ctypes.CDLL(library).XXH3_128bits
     function.argtypes = (ctypes.c_void_p, ctypes.c_size_t)
-    function.restype = ctypes.c_uint64
-    return f"{function(data, len(data)):016x}"
+    function.restype = Xxh128
+    digest = function(data, len(data))
+    return f"{digest.high64:016x}{digest.low64:016x}"
 
 
 def check_apng(a, segment, body, path):
@@ -129,7 +134,7 @@ def check_apng(a, segment, body, path):
     prefix = b"EVIF/frame/1\0" + struct.pack("<IIBB", a["width"], a["height"], 4, 2)
     for i, frame in enumerate(segment["frames"]):
         canonical = prefix + decoded[i*size:(i+1)*size]
-        assert xxh3(canonical) == frame["samples"]["xxh3-64"]
+        assert xxh3(canonical) == frame["samples"]["xxh3-128"]
         if frame["samples"].get("sha256") is not None:
             assert hashlib.sha256(canonical).hexdigest() == frame["samples"]["sha256"]
 
@@ -171,9 +176,9 @@ def inspect(path, decode_apng=False):
                     hashes[key].update(bytes([duration is not None]))
                     if duration is not None:
                         hashes[key].update(ratio(duration))
-                    sample_hash = frame["samples"]["xxh3-64"]
-                    assert len(sample_hash) == 16 and all(c in "0123456789abcdef" for c in sample_hash)
-                    hashes[key].update(struct.pack("<Q", int(sample_hash, 16)))
+                    sample_hash = frame["samples"]["xxh3-128"]
+                    assert len(sample_hash) == 32 and all(c in "0123456789abcdef" for c in sample_hash)
+                    hashes[key].update(int(sample_hash, 16).to_bytes(16, "little"))
                     counts[key] += 1
                 if value["storage"]["kind"] == "embedded":
                     pending = value

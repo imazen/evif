@@ -52,7 +52,7 @@ std. Unknown ancillary records and original scoring JSON remain addressable by
 their spans for lossless pass-through. External references remain unresolved.
 
 `frame_hash` accepts strided, little-endian raw rows and preserves float bits.
-It returns canonical XXH3-64 and optional SHA-256 checks in `SampleHashes`, computing
+It returns canonical XXH3-128 and optional SHA-256 checks in `SampleHashes`, computing
 both by default in one traversal. `frame_hash_xxh3` computes only XXH3; omitting
 SHA-256 does not change media identity. Both hash the same descriptor and samples,
 excluding row padding, without color conversion. Media roots use the canonical

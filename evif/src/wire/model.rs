@@ -74,28 +74,28 @@ impl<'de> Deserialize<'de> for Hash {
     }
 }
 
-/// Canonical XXH3-64 sample digest, serialized as 16 lowercase hex digits.
+/// Canonical XXH3-128 sample digest, serialized as 32 lowercase hex digits.
 /// Uses the default (zero) seed and standard XXH3 secret.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct SampleHash(pub u64);
+pub struct SampleHash(pub u128);
 impl fmt::Display for SampleHash {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:016x}", self.0)
+        write!(f, "{:032x}", self.0)
     }
 }
 impl FromStr for SampleHash {
     type Err = Error;
     fn from_str(text: &str) -> Result<Self, Error> {
         check(
-            text.len() == 16
+            text.len() == 32
                 && text
                     .bytes()
                     .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)),
-            "invalid XXH3-64",
+            "invalid XXH3-128",
         )?;
-        u64::from_str_radix(text, 16)
+        u128::from_str_radix(text, 16)
             .map(Self)
-            .map_err(|_| Error::Invalid("invalid XXH3-64"))
+            .map_err(|_| Error::Invalid("invalid XXH3-128"))
     }
 }
 impl Serialize for SampleHash {
@@ -115,8 +115,8 @@ impl<'de> Deserialize<'de> for SampleHash {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SampleHashes {
-    #[serde(rename = "xxh3-64")]
-    pub xxh3_64: SampleHash,
+    #[serde(rename = "xxh3-128")]
+    pub xxh3_128: SampleHash,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sha256: Option<Hash>,
 }
@@ -249,7 +249,7 @@ impl Asset {
     }
     pub(crate) fn hasher(&self) -> Sha256 {
         let mut h = Sha256::new();
-        h.update(b"EVIF/media/2\0");
+        h.update(b"EVIF/media/3\0");
         h.update([1, self.kind as u8]); // resolved-rgb profile revision
         h.update(self.width.to_le_bytes());
         h.update(self.height.to_le_bytes());
@@ -276,7 +276,7 @@ impl Asset {
 
 /// Hash a decoded frame, skipping row padding. Multibyte samples must already
 /// be little-endian, including raw IEEE float bits. No color conversion or
-/// nonfinite-value repair is performed. Returns canonical XXH3-64 and additional
+/// nonfinite-value repair is performed. Returns canonical XXH3-128 and additional
 /// SHA-256, computed in one traversal. See [`frame_hash_xxh3`] for XXH3 alone.
 pub fn frame_hash(
     asset: &Asset,
@@ -286,7 +286,7 @@ pub fn frame_hash(
     hash_frame(asset, samples_le, stride_bytes, true)
 }
 
-/// Hash the same canonical frame bytes with XXH3-64 only, without computing
+/// Hash the same canonical frame bytes with XXH3-128 only, without computing
 /// SHA-256. The result has the same canonical identity as [`frame_hash`].
 pub fn frame_hash_xxh3(
     asset: &Asset,
@@ -333,7 +333,7 @@ fn hash_frame(
         update(&samples_le[y * stride_bytes..y * stride_bytes + row]);
     }
     Ok(SampleHashes {
-        xxh3_64: SampleHash(xxh3.digest()),
+        xxh3_128: SampleHash(xxh3.digest128()),
         sha256: sha256.map(|h| Hash(h.finalize().into())),
     })
 }
@@ -352,7 +352,7 @@ impl Frame {
         if let Some(time) = self.duration {
             time.hash(h);
         }
-        h.update(self.samples.xxh3_64.0.to_le_bytes());
+        h.update(self.samples.xxh3_128.0.to_le_bytes());
     }
 }
 

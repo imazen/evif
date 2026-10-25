@@ -6,11 +6,10 @@ These are research results, not a change to EVIF's wire hash. They extend the
 and locally reproduced controls are identified separately.
 
 Decision, October 25, 2026: use our zenhash implementation. EVIF already depends
-on it. The canonical wire hash remains XXH3-64 with the standard default secret
-and zero seed; optional SHA-256 sample checks remain available. Selecting the
-implementation does not select a different digest width or change the wire
-contract. The measured portability and existing implementation support this
-choice; the statistical limitations documented below still apply.
+on it. The subsequent width decision selects canonical XXH3-128 with the standard
+default secret and zero seed; optional SHA-256 sample checks remain available.
+The current wire contract is in [SPEC.md](../SPEC.md). The measured portability
+and existing implementation support this choice; the statistical limitations documented below still apply.
 
 ## What the XXH3 failures mean
 

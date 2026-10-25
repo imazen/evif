@@ -59,15 +59,15 @@ fn sample_hashes_match_independent_algorithms_and_exclude_padding() {
             }
             let both = frame_hash(&a, &padded, stride).unwrap();
             let fast = frame_hash_xxh3(&a, &padded, stride).unwrap();
-            assert_eq!(both.xxh3_64.0, xxhash_rust::xxh3::xxh3_64(&canonical));
+            assert_eq!(both.xxh3_128.0, xxhash_rust::xxh3::xxh3_128(&canonical));
             assert_eq!(both.sha256, Some(Hash(Sha256::digest(&canonical).into())));
-            assert_eq!(fast.xxh3_64, both.xxh3_64);
+            assert_eq!(fast.xxh3_128, both.xxh3_128);
             assert_eq!(fast.sha256, None);
             padded[row] ^= 1; // padding is not a sample
             assert_eq!(frame_hash(&a, &padded, stride).unwrap(), both);
             padded[0] ^= 1;
             let changed = frame_hash(&a, &padded, stride).unwrap();
-            assert_ne!(changed.xxh3_64, both.xxh3_64);
+            assert_ne!(changed.xxh3_128, both.xxh3_128);
             assert_ne!(changed.sha256, both.sha256);
         }
     }
@@ -82,7 +82,8 @@ fn optional_sample_sha_does_not_change_identity_but_canonical_xxh3_does() {
             match mode {
                 1 => f.samples.sha256 = None,
                 2 => f.samples.sha256 = Some(Hash::of(b"different check")),
-                3 => f.samples.xxh3_64.0 ^= 1,
+                3 => f.samples.xxh3_128.0 ^= 1,
+                4 => f.samples.xxh3_128.0 ^= 1u128 << 127,
                 _ => (),
             }
         }
@@ -98,16 +99,20 @@ fn optional_sample_sha_does_not_change_identity_but_canonical_xxh3_does() {
     assert_eq!(make(0), make(1));
     assert_eq!(make(0), make(2));
     assert_ne!(make(0), make(3));
+    assert_ne!(make(0), make(4)); // the high half must also bind media identity
 }
 
 #[test]
 fn sample_hash_json_requires_canonical_xxh3_even_with_sha256() {
     let fast = SampleHashes {
-        xxh3_64: SampleHash(0x0123456789abcdef),
+        xxh3_128: SampleHash(0x0123456789abcdef_fedcba9876543210),
         sha256: None,
     };
     let encoded = serde_json::to_string(&fast).unwrap();
-    assert_eq!(encoded, r#"{"xxh3-64":"0123456789abcdef"}"#);
+    assert_eq!(
+        encoded,
+        r#"{"xxh3-128":"0123456789abcdeffedcba9876543210"}"#
+    );
     assert_eq!(
         serde_json::from_str::<SampleHashes>(&encoded).unwrap(),
         fast
@@ -115,17 +120,34 @@ fn sample_hash_json_requires_canonical_xxh3_even_with_sha256() {
     for invalid in [
         r#"{}"#,
         r#"{"sha256":null}"#,
-        r#"{"xxh3-64":123}"#,
-        r#"{"xxh3-64":"0123456789ABCDEF"}"#,
-        r#"{"xxh3-64":"1234"}"#,
-        r#"{"xxh3-64":"0123456789abcdef","sha256":"bad"}"#,
-        r#"{"xxh3-64":"0123456789abcdef","other":1}"#,
+        r#"{"xxh3-64":"0123456789abcdef"}"#,
+        r#"{"xxh3-128":"0123456789abcdef"}"#,
+        r#"{"xxh3-128":"00123456789abcdeffedcba9876543210"}"#,
+        r#"{"xxh3-128":"000123456789abcdeffedcba9876543210","xxh3-64":"0123456789abcdef"}"#,
+        r#"{"xxh3-128":123}"#,
+        r#"{"xxh3-128":"0123456789ABCDEFFEDCBA9876543210"}"#,
+        r#"{"xxh3-128":"1234"}"#,
+        r#"{"xxh3-128":"0123456789abcdeffedcba9876543210","sha256":"bad"}"#,
+        r#"{"xxh3-128":"0123456789abcdeffedcba9876543210","other":1}"#,
         r#""0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef""#,
     ] {
         assert!(
             serde_json::from_str::<SampleHashes>(invalid).is_err(),
             "{invalid}"
         );
+    }
+}
+
+#[test]
+fn sample_hash_full_width_and_zero_padding_are_canonical() {
+    for (value, text) in [
+        (0, "00000000000000000000000000000000"),
+        (1, "00000000000000000000000000000001"),
+        (1u128 << 64, "00000000000000010000000000000000"),
+        (u128::MAX, "ffffffffffffffffffffffffffffffff"),
+    ] {
+        assert_eq!(SampleHash(value).to_string(), text);
+        assert_eq!(text.parse::<SampleHash>().unwrap(), SampleHash(value));
     }
 }
 fn segment(a: &Asset, bytes: &[u8]) -> Segment {

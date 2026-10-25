@@ -89,8 +89,8 @@ JSON object. Nullable fields may be omitted and mean null.
 All u64 quantities are decimal **strings**, digits only, without leading zero
 except `"0"`, in range 0..18446744073709551615. u32 quantities are JSON integers.
 A rational is `{"num":"1001","den":"30000"}`: positive reduced u64 values.
-SHA-256 hashes are exactly 64 lowercase hexadecimal characters; XXH3-64 hashes
-are exactly 16, the zero-padded hexadecimal representation of the unsigned digest.
+SHA-256 hashes are exactly 64 lowercase hexadecimal characters; XXH3-128 hashes
+are exactly 32, the zero-padded hexadecimal representation of the unsigned digest.
 No canonical JSON is
 required; whitespace/key order do not affect media identity. Exact pass-through
 retains original record bytes, since reserialization can change numeric spelling.
@@ -142,7 +142,7 @@ Mastering peak is not the experimental display. No redundant HDR flag is require
   "carrier": "apng",
   "frames": [
     {"duration":{"num":"1001","den":"30000"},
-     "samples":{"xxh3-64":"<16 lowercase hex digits>","sha256":"<64 lowercase hex digits>"}}
+     "samples":{"xxh3-128":"<32 lowercase hex digits>","sha256":"<64 lowercase hex digits>"}}
   ],
   "storage": {"kind":"embedded","sha256":null}
 }
@@ -182,8 +182,8 @@ optional index may accelerate seeking, but must match the actual records.
 
 ## 6. Sample and media hashes
 
-XXH3-64 is the canonical decoded-sample digest. The `samples` object requires
-`xxh3-64`; `sha256` is an optional additional check over exactly the same bytes.
+XXH3-128 is the canonical decoded-sample digest. The `samples` object requires
+`xxh3-128`; `sha256` is an optional additional check over exactly the same bytes.
 Omission or null means no SHA-256 check is recorded. Writers should emit both by
 default, but readers may verify either or both and must report which they checked.
 If both are checked, both must match. Container parsing alone verifies neither
@@ -196,7 +196,7 @@ Canonical frame bytes for both algorithms:
                 || tightly-packed little-endian sample bytes
 ```
 
-XXH3-64 uses the standard default secret and zero seed (`XXH3_64bits`). SHA-256
+XXH3-128 uses the standard default secret and zero seed (`XXH3_128bits`). SHA-256
 uses its standard initialization. Here `\0` means one zero byte. Rows run top to bottom, pixels left to right, channels
 in declared order. Exclude row padding and preserve float bits. Enum codes:
 channels gray=1, gray-alpha=2, rgb=3, rgba=4; samples u8=1, u16=2, f16=3, f32=4.
@@ -204,7 +204,7 @@ channels gray=1, gray-alpha=2, rgb=3, rgba=4; samples u8=1, u16=2, f16=3, f32=4.
 Media digest is SHA-256 over this binary concatenation, integers LE:
 
 ```
-"EVIF/media/2\0"
+"EVIF/media/3\0"
 profile-code:u8 = 1
 kind:u8                   still=1, sequence=2
 width:u32 height:u32
@@ -218,8 +218,12 @@ frame-count:u64
 plays-present:u8          0/1; if 1, plays:u64
 for each frame in presentation order:
     duration-present:u8   0/1; if 1, num:u64 den:u64
-    frame-xxh3-64:u64
+    frame-xxh3-128:u128
 ```
+
+Serialize the 128-bit sample digest as 16 little-endian bytes: the low 64-bit
+half first, then the high 64-bit half, both little-endian. JSON hex instead
+prints the numeric value most-significant digit first (high half then low half).
 
 Exclude optional sample SHA-256 checks, local ID, storage compression/segmentation,
 paths, BITS and scores. Include canonical sample digests, interpretation, timing
@@ -234,9 +238,10 @@ External payload SHA-256 hashes still address the exact external bytes. None of
 these hashes authenticates a producer. Metadata records have no required hash;
 notes and scores can change independently of media.
 
-This unreleased draft replaces the earlier SHA-only `samples` string with the
-object above and changes the media-hash domain to revision 2. Old draft files must
-be regenerated from decoded samples; their SHA-256 cannot be converted to XXH3.
+This unreleased draft uses XXH3-128 instead of the earlier XXH3-64 sample
+object or SHA-only `samples` string. The media-hash domain is revision 3. Old
+draft files must be regenerated from decoded samples; neither SHA-256 nor
+XXH3-64 can be converted to XXH3-128.
 The file header remains wire major 1, minor 0. Old/new sample schemas are refused
 by readers expecting the other draft, rather than silently reinterpreted.
 
