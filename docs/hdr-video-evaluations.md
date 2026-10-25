@@ -5,6 +5,10 @@ Design proposal, 2026-10-25. **This is not implemented EVIF HDR/video support.**
 rendition plugin still take RGB8. The executable checks below test the proposed
 semantics and the existing carriers, not a new container reader or metric runner.
 
+The [CVVDP/HDR-VDP source audit](vdp-input-audit.md) identifies concrete adapter
+gaps and the additional photometry, spectral-emission, observer and task bindings
+required before this proposal can claim sufficient inputs for those metrics.
+
 The unit of evidence is **an evaluation of identified media under a recorded
 presentation and metric contract**. A codec file, a decoded raster, a display
 simulation, and a score are different objects. Keeping their identities separate
