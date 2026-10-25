@@ -3,7 +3,8 @@
 //! An EVIF file wraps one distorted image for image-quality-metric testing:
 //! the interior bitstream an encoder produced, a lossless PNG or IMIJ rendition of the
 //! decoded pixels, the recipe that made it, and the metric scores computed on
-//! that rendition. The byte layout is in `SPEC.md` at the repository root.
+//! that rendition. This legacy API uses `docs/legacy-wire-0.md`; [`wire`] uses
+//! the symmetric still/video layout in `SPEC.md` at the repository root.
 //!
 //! This crate reads and writes the container and computes pixel digests. It
 //! decodes no image codec: the rendition and bitstream are opaque bytes here.
@@ -18,6 +19,10 @@ extern crate std;
 mod digest;
 mod error;
 mod meta;
+
+/// Symmetric still/video assets and appendable evaluation records (wire major 1).
+/// The legacy [`Evif`] API continues to read and write wire major 0.
+pub mod wire;
 
 use alloc::vec::Vec;
 
