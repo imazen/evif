@@ -64,6 +64,9 @@ hash-cost-build:
 hash-cost output:
     {{heavy}} tools/hash-cost/target/release/evif-hash-cost {{output}}
 
+hash-cost-xxh3 output:
+    {{heavy}} tools/hash-cost/target/release/evif-hash-cost {{output}} --xxh3-only
+
 hash-cost-check:
     cargo fmt --manifest-path tools/hash-cost/Cargo.toml --check
     {{heavy}} cargo clippy --release --manifest-path tools/hash-cost/Cargo.toml -- -D warnings

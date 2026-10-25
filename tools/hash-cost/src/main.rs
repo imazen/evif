@@ -7,6 +7,7 @@ use zenbench::{Suite, Throughput};
 #[derive(Clone, Copy, Debug)]
 enum Algorithm {
     Xxh3,
+    Xxh3_128,
     Rapid,
     Muse,
     Sha256,
@@ -15,8 +16,9 @@ enum Algorithm {
     Kt256,
     Ascon,
 }
-const ALGORITHMS: [Algorithm; 8] = [
+const ALGORITHMS: [Algorithm; 9] = [
     Algorithm::Xxh3,
+    Algorithm::Xxh3_128,
     Algorithm::Rapid,
     Algorithm::Muse,
     Algorithm::Sha256,
@@ -35,6 +37,13 @@ fn hash(algorithm: Algorithm, bytes: &[u8], chunk: usize) -> [u8; 32] {
                 h.update(part);
             }
             out[..8].copy_from_slice(&h.digest().to_le_bytes());
+        }
+        Algorithm::Xxh3_128 => {
+            let mut h = zenhash::Xxh3::new();
+            for part in bytes.chunks(chunk) {
+                h.update(part);
+            }
+            out[..16].copy_from_slice(&h.digest128().to_le_bytes());
         }
         Algorithm::Rapid => {
             let mut h =
@@ -117,6 +126,18 @@ fn validate() {
     let bytes: Vec<u8> = (0usize..20000)
         .map(|i| (i.wrapping_mul(37) ^ (i >> 8)) as u8)
         .collect();
+    // Cross-checked against the independent system C xxHash 0.8.3 library.
+    // Numeric values, serialized little-endian by this benchmark adapter.
+    for (input, expected) in [
+        (&b""[..], 0x99aa06d3014798d86001c324468d497fu128),
+        (&b"hello world"[..], 0xdf8d09e93f874900a99b8775cc15b6c7),
+        (&bytes[..], 0x1ae1c3f6958041a561c8314e1f147a5e),
+    ] {
+        assert_eq!(
+            &hash(Algorithm::Xxh3_128, input, 63)[..16],
+            &expected.to_le_bytes()
+        );
+    }
     for algorithm in ALGORITHMS {
         let expected = hash(algorithm, &bytes, bytes.len());
         for chunk in [1, 63, 64, 65, 1023, 1024, 8191, 8192, 8193] {
@@ -129,7 +150,7 @@ fn validate() {
     }
 }
 
-fn benchmarks(suite: &mut Suite) {
+fn benchmarks(suite: &mut Suite, algorithms: &[Algorithm]) {
     for size in [64usize, 4096, 1024 * 1024, 64 * 1024 * 1024] {
         let bytes: Arc<[u8]> = (0..size)
             .map(|i| (i.wrapping_mul(37) ^ (i >> 8)) as u8)
@@ -145,7 +166,7 @@ fn benchmarks(suite: &mut Suite) {
                     .max_rounds(30)
                     .warmup_time(Duration::from_millis(100));
                 g.config().auto_rounds = false;
-                for algorithm in ALGORITHMS {
+                for &algorithm in algorithms {
                     let input = Arc::clone(&bytes);
                     g.bench(format!("{algorithm:?}"), move |b| {
                         b.iter(|| black_box(hash(algorithm, black_box(&input), chunk)));
@@ -168,6 +189,11 @@ fn main() {
             .expect("usage: evif-hash-cost output.json"),
     );
     assert!(!output.exists(), "refusing to overwrite results");
-    let result = zenbench::run(benchmarks);
+    let algorithms = if std::env::args().nth(2).as_deref() == Some("--xxh3-only") {
+        &[Algorithm::Xxh3, Algorithm::Xxh3_128][..]
+    } else {
+        &ALGORITHMS[..]
+    };
+    let result = zenbench::run(|suite| benchmarks(suite, algorithms));
     result.save(&output).expect("save complete samples");
 }

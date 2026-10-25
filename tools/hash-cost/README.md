@@ -11,13 +11,14 @@ include the CPU, implementation caveats, all cases and retained raw results.
 just hash-cost-build
 just hash-cost-check
 just hash-cost /absolute/path/to/new-results.json
+just hash-cost-xxh3 /absolute/path/to/width-results.json
 ```
 
 Set `TMPDIR` to persistent scratch and `HEAVY` to the machine's resource wrapper.
 Save stdout/stderr to a log alongside the results. The output path must not exist.
 Record source commit, CPU, compiler and command when publishing results.
 
-The eight arms use incremental APIs: XXH3-64 (zenhash), portable Rapidhash v3
+The nine arms use incremental APIs: XXH3-64/128 (zenhash), portable Rapidhash v3
 with default C-compatible secrets, MuseAir v2 Standard-128 with zero seeds,
 SHA-256, BLAKE3's ordinary unkeyed mode, KT128, KT256, and NIST Ascon-Hash256.
 Both KT functions use empty customization and produce 32 bytes. All crypto arms
@@ -30,6 +31,9 @@ and 64 MiB. Large inputs are measured both as a single update and as 16 KiB
 updates. These model update granularity, not an actual strided image or a full
 decoder pipeline. Known-answer examples and chunk-boundary equivalence checks
 run before timing. `--check` runs these controls without benchmarking.
+The `hash-cost-xxh3` recipe selects only the two XXH3 widths, with identical
+streaming updates and different finalization. Its 128-bit constants were also
+checked against the independent C xxHash 0.8.3 library.
 
 Zenbench interleaves 30 rounds per group. Input is reused; these are warm/repeated
 buffer measurements, not cold-file or storage throughput. There is one hashing
