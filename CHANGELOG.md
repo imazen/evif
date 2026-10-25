@@ -13,6 +13,12 @@ All notable changes to this repository. Format: [Keep a Changelog](https://keepa
 
 ## Workspace
 
+### Added
+- HDR/sequence evaluation proposal with exact timing, condition bindings and
+  storage-independent evaluation identities; executable design checks (`4e6d5471`).
+- PQ/HLG APNG carrier tests and an independent sample read-back oracle (`26408c0b`,
+  `2f177da1`). These do not enable EVIF video output.
+
 ### Changed
 - Website and README use haunted-file artwork, with a responsive violet and lime
   theme and matching SVG icons (`486fee4e`).

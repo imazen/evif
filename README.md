@@ -146,6 +146,13 @@ For Rust callers migrating from draft 0.0, `Evif.png` becomes
 `Evif.rendition.data`; check `Evif.rendition.format` before decoding it.
 `Evif::new` still accepts PNG bytes. Handle `Bpp::Recorded` when matching costs.
 
+## HDR and video design
+
+The current CLI evaluates RGB8 still images. The [HDR and sequence proposal](docs/hdr-video-evaluations.md)
+separates lossless rendition storage, exact timing, viewing conditions and metric
+execution. It includes executable contract and carrier checks; end-to-end HDR/video
+support is not yet implemented.
+
 ## Families and judges
 
 | family | what it varies |
