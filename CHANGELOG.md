@@ -20,6 +20,8 @@ All notable changes to this repository. Format: [Keep a Changelog](https://keepa
 ## Workspace
 
 ### Added
+- Isolated Rust hash comparison tool, pinned implementations, streaming controls
+  and measured single-thread costs; no wire algorithm change (`2e6ecfbe`).
 - Resolved SDR/HDR rendition design profile with exact frame timing, explicit
   signal units, and segment-plan checks. Gain maps and paired SDR/HDR copies
   are not required. This does not enable container video I/O (`9618f932`).

@@ -4,6 +4,9 @@ Research tool only. It does not change EVIF's wire algorithms or add dependencie
 to the shipped crates. The lockfile pins implementation versions. Libraries are
 used under their own licenses, without vendoring or modifying their algorithms.
 
+[Measured costs and selection notes](../../benchmarks/hash-cost-2026-10-25.md)
+include the CPU, implementation caveats, all cases and retained raw results.
+
 ```
 just hash-cost-build
 just hash-cost-check
