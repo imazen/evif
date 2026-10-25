@@ -55,7 +55,9 @@ fn hdr_apng_preserves_samples_color_and_fractional_timing() {
         let expected_le: Vec<u8> = expected
             .iter()
             .flat_map(|f| {
-                f.chunks_exact(2)
+                f.as_chunks::<2>()
+                    .0
+                    .iter()
                     .flat_map(|b| u16::from_ne_bytes([b[0], b[1]]).to_le_bytes())
             })
             .collect();
