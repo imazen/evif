@@ -14,6 +14,9 @@ All notable changes to this repository. Format: [Keep a Changelog](https://keepa
 ## Workspace
 
 ### Added
+- Resolved SDR/HDR rendition design profile with exact frame timing, explicit
+  signal units, and segment-plan checks. Gain maps and paired SDR/HDR copies
+  are not required. This does not enable container video I/O (`9618f932`).
 - HDR/sequence evaluation proposal with exact timing, condition bindings and
   storage-independent evaluation identities; executable design checks (`4e6d5471`).
 - PQ/HLG APNG carrier tests and an independent sample read-back oracle (`26408c0b`,
