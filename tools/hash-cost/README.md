@@ -8,6 +8,9 @@ used under their own licenses, without vendoring or modifying their algorithms.
 include the CPU, implementation caveats, all cases and retained raw results.
 The [XXH3 width comparison](../../benchmarks/xxh3-widths-2026-10-25.md) measures
 64/128-bit costs and separates output stability from statistical-test results.
+The [WASM and quality investigation](../../benchmarks/hash-portability-2026-10-25.md)
+records two-engine measurements, unsafe-code audits and a reproducible
+fixed-secret Rapidhash collision control (`just hash-quality-controls`).
 
 ```
 just hash-cost-build
