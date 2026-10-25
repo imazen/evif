@@ -37,3 +37,7 @@ zenhash = { git = "https://github.com/imazen/zenhash", rev = "7774776d2eb7b27da0
 
 [lints.rust]
 unsafe_code = "forbid"
+
+[dev-dependencies]
+# Exercise sequence carriers through the same trait revision as pinned zenpng.
+zencodec = { git = "https://github.com/imazen/zencodec", rev = "d327434b0826a3e39633665c76f5081c0ceb34cc", default-features = false }

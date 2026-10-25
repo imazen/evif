@@ -204,6 +204,7 @@ dependencies = [
  "rgb",
  "serde",
  "serde_json",
+ "zencodec",
  "zenhash",
  "zenjpeg",
  "zenpixels-convert",

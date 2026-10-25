@@ -41,3 +41,10 @@ site:
     rm -rf out/site && mkdir -p out/site
     cp site/* out/site/ && cp logo.svg out/site/
     @echo "open out/site/index.html"
+
+# Carrier feasibility for the proposed HDR/sequence contract.
+sequence-carriers:
+    {{heavy}} cargo test -p evif-probe --test sequence_carriers -- --nocapture
+
+sequence-oracle artifacts:
+    {{heavy}} python3 tools/contracts/verify_apng.py {{artifacts}}
