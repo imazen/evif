@@ -6,8 +6,9 @@
 
 EVIF is a container and a probe for stress-testing image quality metrics such as
 SSIMULACRA2, butteraugli and zensim. An `.evif` file holds a distorted image made by
-pushing a real encoder's knobs where no sane encoder goes, the exact recipe, the
-lossless pixels our decoder produced from it, and the score every metric gave it.
+pushing a real encoder's knobs where no sane encoder goes, the exact recipe, one
+lossless reference decode, and the score every metric gave it. The original
+encoded bytes can be retained or omitted with their size and checksum recorded.
 Anyone can re-run the metrics and check the recorded scores.
 
 It is built for perceptual-metric research: finding the encodes a metric gets wrong,
@@ -88,29 +89,62 @@ target/release/evif render --family zenjpeg-expert --out out/honest \
   gain_vs_baseline: {"ssim2":-0.897,"zensim":-0.751,"butteraugli":-1.090, ...}
 ```
 
-`extract` writes the interior `.jpeg` (any decoder can open it), the `.png` rendition
-the metrics scored, and the scores as JSON.
-For an interior PNG, the original encoded bytes go under `bitstreams/` so they
-remain distinct from the `.png` rendition in the output directory.
+`extract` writes the retained candidate bytes, the stored PNG/IMIJ reference
+decode, and scores as JSON. Colliding codec/rendition extensions use a separate
+`bitstreams/` directory. `--format native` extracts only the original candidate;
+it fails if those bytes were omitted. EVIF-specific candidate streams use the
+`.evifbits` extension to distinguish them from complete `.evif` containers.
 
 ## What is in the coffin
 
 | chunk | holds |
 |---|---|
 | `HEAD` | dimensions, channel layout, sample type |
-| `BITS` | the interior bitstream, byte for byte, with its codec tag; **interior bpp counts only this** |
-| `PIXL` | a lossless PNG of what *our* decoder produced, so people see exactly what the metrics saw |
-| `DIGS` | XXH3-64 digests of the distorted and reference rasters, after IMI's `pSUM` design |
-| `clam` | the size a synthetic distortion pretends to cost |
-| `srce` `knob` `scor` | source id, the recipe (family, codec, commit, parameters, target), and every score with metric, variant, version and implementation |
-| `SEAL` | XXH3-64 of the whole file before it |
+| `BITS` | optional candidate bytes: an external codec or EVIF-specific compression |
+| `BINF` | recorded candidate codec, encoded size and checksum when bytes are omitted |
+| `PNGF` **or** `IMIJ` | one lossless reference decode: the exact pixels the metrics scored |
+| `DIGS` | digests of the scored and source rasters |
+| `clam` | explicitly synthetic claimed cost, when no encoded cost exists |
+| `srce` `knob` `scor` | source, recipe and versioned scores |
+| `SEAL` | checksum of the preceding file bytes |
 
-Tag case follows PNG: an upper-case first letter is critical, lower case is ancillary.
-The byte layout is in [SPEC.md](SPEC.md).
+PNG and IMIJ are alternatives; a file stores exactly one. Viewers show
+that reference decode because candidate decoders can differ in IDCT, chroma
+upsampling or film grain. EVIF-specific compression goes in `BITS`, not in the
+reference decode. Legacy `PIXL` files remain readable. See [SPEC.md](SPEC.md).
 
-Studies serve the `PIXL` rendition, not the interior bitstream: a browser's own JPEG
-or AV1 decoder can differ from ours in IDCT, chroma upsampling or film grain, and the
-scores belong to our decoder's pixels.
+### Storage and output choices
+
+```sh
+# One PNG rendition per candidate, without a second file of original codec bytes.
+evif render --family zenjpeg-expert --qualities 20,60,90 --out out/png \
+    --format png --omit-bits input.png
+# Complete containers with PNGF reference decodes and recorded candidate costs.
+evif render --family zenjpeg-expert --qualities 20,60,90 --out out/evif \
+    --format evif --rendition png --omit-bits input.png
+# Remove BITS from an existing file while preserving recipe, scores and provenance.
+evif repack input.evif compact.evif --omit-bits
+# Export only the retained original codec file.
+evif extract input.evif out/native --format native
+```
+
+`render --format` accepts `png`, `imij`, `native`, or `evif`. `probe` and EVIF
+rendering accept `--rendition png|imij` and `--omit-bits`. The public binary
+provides PNG; a companion registers the IMIJ encoder/decoder through
+`Registry::add_rendition_codec`. The container library can preserve and extract
+IMIJ bytes without that plugin. Native output needs actual candidate bytes.
+
+Existing defaults retain candidate bytes and use PNG reference decodes.
+`render.tsv` keeps its original first six columns and appends output format/path,
+candidate codec/checksum, and retained bitstream path. An empty `png` column
+means the selected output is not PNG. Candidate bpp counts the candidate codec,
+never PNG/IMIJ storage or container overhead. `inspect` distinguishes embedded,
+recorded, synthetic claimed, and unknown costs. Recorded checksums cannot prove
+that an omitted bitstream can still be reproduced.
+
+For Rust callers migrating from draft 0.0, `Evif.png` becomes
+`Evif.rendition.data`; check `Evif.rendition.format` before decoding it.
+`Evif::new` still accepts PNG bytes. Handle `Bpp::Recorded` when matching costs.
 
 ## Families and judges
 

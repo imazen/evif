@@ -1,9 +1,9 @@
-# EVIF format, version 0 (draft)
+# EVIF format, version 0.1 (draft)
 
 An EVIF file wraps one distorted image for image-quality-metric testing. It
-holds the interior bitstream an encoder produced (or nothing, for a synthetic
-distortion), a lossless rendition of the pixels our decoder produced from it,
-the recipe that made it, and the metric scores computed on that rendition. The
+holds an optional candidate bitstream, one lossless reference decode of the
+scored pixels, the recipe that made it, and the metric scores computed on that
+rendition. The
 file reports on itself: anyone can check the scores against the pixels.
 
 All integers are little-endian. Draft files (major version 0) may change
@@ -14,7 +14,7 @@ without notice.
 ```
 signature    8 bytes   8B 45 56 49 46 0D 0A 1A   ("\x8BEVIF\r\n\x1A")
 major        u8        0
-minor        u8        0
+minor        u8        1
 reserved     u16       0
 chunks       ...
 ```
@@ -39,7 +39,9 @@ allowed at most once.
 |---|---|---|---|---|
 | `HEAD` | critical | yes | first | image header (2) |
 | `BITS` | critical | no | anywhere | interior bitstream (3) |
-| `PIXL` | critical | yes | anywhere | lossless rendition (4) |
+| `BINF` | critical | no | anywhere | recorded candidate codec, size and checksum (3.1) |
+| `PNGF` / `IMIJ` | critical | exactly one | anywhere | lossless reference decode (4) |
+| `PIXL` | critical | legacy alternative | anywhere | version-0 PNG reference decode (4.1) |
 | `DIGS` | critical | yes | anywhere | pixel digests (5) |
 | `clam` | ancillary | no | anywhere | claimed size (6) |
 | `srce` | ancillary | no | anywhere | source description, JSON (7) |
@@ -69,26 +71,66 @@ Alpha, when present, is straight (not premultiplied).
 
 ```
 codec        4 bytes   "jpeg" "webp" "avif" "jxl " "png " "imi " ...
-bitstream    rest      the codec's complete file, byte for byte
+bitstream    rest      the candidate codec's complete encoded bytes
 ```
 
 **Interior bits per pixel** is `8 * (length - 4) / (width * height)`: the
-encoded image without the EVIF container. Extracting `bitstream` gives a valid
-file of that codec, so any decoder can check it.
+encoded image without the EVIF container. The codec tag identifies the candidate
+compression, including `"evif"` for EVIF-specific coding that is not an external
+codec. Such a payload is a candidate codestream, not a nested EVIF container;
+its coding version and parameters belong in `knob`. This container does not
+define that compression algorithm or require its decoder.
 
-## 4. `PIXL`
+`BITS` is optional for codec-generated and synthetic images alike. Omitting it
+does not change the authoritative pixels or their scores. To retain an actual
+encoded cost when dropping the bytes, write `BINF`; do not use `clam` for this.
+
+### 3.1. `BINF`
 
 ```
-format       4 bytes   "png "
-data         rest      a complete PNG
+codec        4 bytes   candidate codec tag, as BITS
+bytes        u64       observed candidate encoded byte count
+xxh3         u64       XXH3-64 of the complete candidate encoded bytes
 ```
 
-The rendition is the raster our decoder produced from `BITS` (or the
-synthetic distortion's output when `BITS` is absent). Metrics score this
-raster, and viewers show it, so people see exactly what the metrics saw. It
-decodes to `HEAD`'s dimensions, layout and sample type, and its digest equals
-the `distorted` digest in `DIGS`. PNG color chunks (`gAMA`, `cHRM`, `iCCP`)
-are not written; the raster is sRGB per `HEAD`.
+The payload is exactly 20 bytes. When `BITS` is present, all three fields must
+match it; a mismatch is corrupt, even if `SEAL` is valid. With no `BITS`, the
+record is retained provenance, not independently verified encoded bytes.
+Candidate bpp precedence is embedded `BITS`, recorded `BINF`, synthetic `clam`,
+then unknown. Readers label these cases distinctly. Neither reference-decode
+storage nor EVIF overhead enters candidate bpp. XXH3 is not authentication.
+
+## 4. `PNGF` or `IMIJ`: one reference decode
+
+`PNGF` contains a complete PNG, without an additional format prefix. `IMIJ`
+contains a complete lossless IMI file. Exactly one reference-decode chunk is
+required. Two reference decodes are corrupt, even if their tags or bytes differ.
+A normal file does not store duplicate PNG and IMIJ copies.
+
+This raster is the candidate decoder's output, or a synthetic distortion's
+output. Metrics score this raster and viewers show it. It must decode to
+`HEAD`'s dimensions, layout and sample type, and its pixel digest must equal
+`DIGS.distorted`. Lossless means exact reproduction of the **scored raster**;
+the candidate that produced that raster may have been lossy.
+
+The current HEAD contract remains sRGB with straight alpha and u8/u16 samples.
+PNG color overrides (`gAMA`, `cHRM`, `iCCP`) are not written. IMIJ uses the same
+sRGB interpretation. This revision does not add native HDR, gain-map roles,
+other primaries, or floating-point samples.
+
+EVIF-specific candidate compression belongs in `BITS`, never in the reference
+decode. The container library treats PNGF and IMIJ as opaque bytes. Pixel
+verification and format conversion require the corresponding codec plugin;
+raw extraction and container checksum verification do not.
+
+### 4.1. Legacy `PIXL`
+
+Readers also accept the version-0 `PIXL` payload: four bytes `"png "` followed
+by a complete PNG. It occupies the same single reference-decode slot as PNGF
+or IMIJ. New writers emit version 0.1 with PNGF/IMIJ; rewriting a legacy file
+preserves its PNG bytes, decoded pixels and metadata, but updates the chunk tag
+and file seal. Older readers refuse the new critical tags instead of silently
+misinterpreting a new file.
 
 ## 5. `DIGS`
 
@@ -97,7 +139,7 @@ count        u8        1 ..= 8
 entries      count x { role u8, digest u64 }
 ```
 
-Roles: 0 = distorted (the `PIXL` raster, required), 1 = reference (the
+Roles: 0 = distorted (the reference-decode raster, required), 1 = reference (the
 source raster the metrics compared against). Each role appears at most once.
 
 Each digest is XXH3-64 (seed 0, default secret) of this 26-byte descriptor
@@ -124,8 +166,8 @@ claimed      u64       bytes the distortion pretends to cost
 ```
 
 For a synthetic distortion with no real bitstream, the size it is scored at.
-Readers report bpp from `clam` only when `BITS` is absent, and label it
-claimed.
+Readers report bpp from `clam` only when both `BITS` and `BINF` are absent,
+and label it claimed.
 
 ## 7. JSON chunks
 

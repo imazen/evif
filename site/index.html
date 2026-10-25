@@ -106,7 +106,7 @@
   <div class="grid">
     <div class="card"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M7 5h12l6 6v17H7zM19 5v7h6M11 17h2m5 0h2M12 22h7"/><path d="m3 11-2 2 2 2m26 4 2 2-2 2"/></svg><h3>Possess</h3><p>Take a real encoder's full parameter vector: per-band quantization, zero-bias, chroma subsampling, adaptive quantization, deringing, trellis.</p></div>
     <div class="card"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 5v22M10 28h12M5 10h22M8 10l-5 9h10zm16 0-5 9h10z"/><circle cx="16" cy="6" r="2"/></svg><h3>Judge</h3><p>Score every sample with several metrics, each pinned to a revision, against the family's honest rate-distortion curve at the same bits per pixel.</p></div>
-    <div class="card"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M7 4h12l6 6v18H7zM19 4v7h6M11 15h10M11 19h5"/><path d="m16 24 2 2 4-4"/></svg><h3>Record</h3><p>Write the bitstream, the pixels, the recipe and every score into one sealed file. <code>evif verify</code> checks the pixels; <code>evif extract</code> hands the bitstream to any decoder.</p></div>
+    <div class="card"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M7 4h12l6 6v18H7zM19 4v7h6M11 15h10M11 19h5"/><path d="m16 24 2 2 4-4"/></svg><h3>Record</h3><p>Store one lossless reference decode, the recipe and every score. Keep candidate bytes or omit them with their size and checksum recorded. <code>evif verify</code> checks the reference pixels; <code>evif extract</code> exports retained candidate bytes.</p></div>
   </div>
 
   <h2>A file speaks</h2>
@@ -126,8 +126,9 @@
   <div class="table-wrap"><table>
     <tr><th>chunk</th><th>holds</th></tr>
     <tr><td>HEAD</td><td>dimensions, channel layout, sample type</td></tr>
-    <tr><td>BITS</td><td>the interior bitstream, byte for byte, with its codec tag; interior bpp counts only this</td></tr>
-    <tr><td>PIXL</td><td>a lossless PNG of what our decoder produced, so viewers see exactly what the metrics saw</td></tr>
+    <tr><td>BITS</td><td>optional candidate bytes, including external codecs or EVIF-specific compression</td></tr>
+    <tr><td>BINF</td><td>recorded candidate codec, encoded size and checksum when bytes are omitted</td></tr>
+    <tr><td>PNGF / IMIJ</td><td>one lossless reference decode: the exact pixels the metrics scored</td></tr>
     <tr><td>DIGS</td><td>XXH3-64 digests of the distorted and reference rasters</td></tr>
     <tr><td>clam</td><td>the size a synthetic distortion pretends to cost</td></tr>
     <tr><td>srce knob scor</td><td>source id, the recipe, and every score with metric, variant, version and implementation</td></tr>

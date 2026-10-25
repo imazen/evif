@@ -7,6 +7,9 @@ All notable changes to this repository. Format: [Keep a Changelog](https://keepa
 ### QUEUED BREAKING CHANGES
 
 - The format is draft v0: chunk layouts may change until the first tagged release.
+- Draft 0.1 replaces `Evif.png` with `Evif.rendition`, adds `Bpp::Recorded`,
+  and writes PNGF/IMIJ instead of PIXL. Legacy PIXL files remain readable;
+  old readers refuse the new critical chunks (`a6f005be`).
 
 ## Workspace
 
@@ -17,6 +20,9 @@ All notable changes to this repository. Format: [Keep a Changelog](https://keepa
 ## evif
 
 ### Added
+- Exactly one PNGF or IMIJ reference decode; optional BITS with recorded codec,
+  size and checksum in BINF. EVIF-specific candidate coding belongs in BITS
+  (`a6f005be`).
 - EVIF container: signature, `HEAD`/`BITS`/`PIXL`/`DIGS`/`clam`/`srce`/`knob`/`scor`/`SEAL`
   chunks, PNG-style tag case, XXH3-64 pixel digests over a domain-separated
   descriptor, whole-file `SEAL`. `no_std` + `alloc`, `forbid(unsafe_code)`.
@@ -25,6 +31,12 @@ All notable changes to this repository. Format: [Keep a Changelog](https://keepa
   independent XXH3 implementation, strided rows.
 
 ## evif-probe
+
+### Changed
+- Reference codec registration supports companion IMIJ implementations. Storage
+  flags select PNG/IMIJ, omit candidate bytes, repack containers, or export
+  PNG/IMIJ/native/EVIF while preserving original candidate cost. Render ledgers
+  append explicit format, path and provenance columns (`b2597dcc`).
 
 ### Fixed
 - PNG extraction preserves the interior bitstream under `bitstreams/` alongside
