@@ -104,6 +104,14 @@ conversion and quantization are explicit preparation steps with implementation,
 parameters, ordering, and output digests. Their values cannot be inferred from a
 codec extension.
 
+Timed rendering metadata belongs to an identified track with exact support
+intervals and a pinned interpretation. Dynamic tone-mapping metadata, gain-map
+parameters, or changing exposure can change presentation while raster samples
+stay identical. Retain their dependencies and include the selected rendering
+recipe in evaluation identity. Preserve unknown metadata for transport, but refuse
+a claim to have reproduced its intended rendering without a supported interpreter.
+Source metadata must not silently override the experiment's prescribed display.
+
 Use the carrier only when it can preserve the contract exactly. PNG/APNG supports
 integer samples and PNG color metadata, including CICP HDR signaling. It does not
 serve as an exact floating-point carrier. Use lossless IMI for admitted float
