@@ -39,6 +39,8 @@ All notable changes to this repository. Format: [Keep a Changelog](https://keepa
   append explicit format, path and provenance columns (`b2597dcc`).
 
 ### Fixed
+- Extraction refuses existing score files; render rejects legacy ledgers before
+  appending incompatible columns (`57ba3891`).
 - PNG extraction preserves the interior bitstream under `bitstreams/` alongside
   the scored rendition (`2b81191d`).
 
