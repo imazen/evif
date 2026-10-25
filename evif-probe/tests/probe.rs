@@ -35,7 +35,7 @@ fn judges() -> Vec<Box<dyn judge::Judge>> {
 
 fn check_file(bytes: &[u8], reference: &Rgb8Image, expect_bits: bool) -> Evif {
     let f = Evif::from_bytes(bytes).expect("file parses");
-    let px = Rgb8Image::from_png(&f.png).expect("PIXL decodes");
+    let px = Rgb8Image::from_png(&f.rendition.data).expect("PNGF decodes");
     assert_eq!(px.digest(), f.digests.distorted, "PIXL digest matches DIGS");
     assert_eq!(f.digests.reference, Some(reference.digest()));
     assert_eq!(f.bits.is_some(), expect_bits);

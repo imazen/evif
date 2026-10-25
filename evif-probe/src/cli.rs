@@ -7,7 +7,7 @@ use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use evif::{Bpp, Evif};
+use evif::{BitstreamInfo, Bpp, Evif, RenditionFormat};
 use serde_json::Value;
 
 use crate::family::Family;
@@ -16,19 +16,21 @@ use crate::judge::{self, Judge};
 use crate::registry::Registry;
 use crate::rng::Rng;
 use crate::search::{self, Baseline, Sample};
-use crate::{Res, write};
+use crate::{Res, rendition, write};
 
 const USAGE: &str = "\
 evif: stress-test image quality metrics with a self-reporting container
 
   evif probe   --family F --target KEY --out DIR [--judges a,b,c] [--samples N]
-               [--keep K] [--seed S] [--baseline-step Q] IMAGE.png...
+               [--keep K] [--seed S] [--baseline-step Q]
+               [--rendition png|imij] [--omit-bits] IMAGE.png...
   evif inspect FILE.evif...        print header, bpp, recipe and scores
-  evif verify  FILE.evif...        check SEAL, PIXL decode, pixel digest
-  evif extract FILE.evif DIR       write the interior bitstream and PNG
+  evif verify  FILE.evif...        check SEAL, reference decode and pixel digest
+  evif extract FILE.evif DIR [--format png|imij|native|evif] [--omit-bits]
+  evif repack INPUT.evif OUTPUT.evif [--rendition png|imij] [--omit-bits]
   evif render  --family F --out DIR (--qualities 5,10,... | --params FILE.jsonl)
-               IMAGE.png...        encode with a family, write decoded PNGs and
-                                   DIR/render.tsv (image, tag, bytes, bpp, png, params)
+               [--format png|imij|native|evif] [--rendition png|imij] [--omit-bits]
+               IMAGE.png...        encode with a family and record DIR/render.tsv
   evif list                        families, judges and score keys";
 
 /// Run the CLI and exit with its status.
@@ -51,8 +53,9 @@ pub fn run(registry: &Registry, args: &[String]) -> Res<()> {
     match args.first().map(String::as_str) {
         Some("probe") => probe(registry, &args[1..]),
         Some("inspect") => inspect(&args[1..]),
-        Some("verify") => verify(&args[1..]),
-        Some("extract") => extract(&args[1..]),
+        Some("verify") => verify(registry, &args[1..]),
+        Some("extract") => extract(registry, &args[1..]),
+        Some("repack") => repack(registry, &args[1..]),
         Some("list") => list(registry),
         Some("render") => render(registry, &args[1..]),
         _ => Err(USAGE.to_string()),
@@ -77,6 +80,8 @@ struct ProbeArgs {
     keep: usize,
     seed: u64,
     baseline_step: f64,
+    rendition: RenditionFormat,
+    omit_bits: bool,
     images: Vec<PathBuf>,
 }
 
@@ -94,6 +99,8 @@ fn parse_probe(registry: &Registry, args: &[String]) -> Res<ProbeArgs> {
         keep: 4,
         seed: 1,
         baseline_step: 5.0,
+        rendition: RenditionFormat::Png,
+        omit_bits: false,
         images: Vec::new(),
     };
     let mut it = args.iter();
@@ -104,6 +111,8 @@ fn parse_probe(registry: &Registry, args: &[String]) -> Res<ProbeArgs> {
                 .ok_or_else(|| format!("{arg} needs a value"))
         };
         match arg.as_str() {
+            "--rendition" => a.rendition = rendition::parse(&value()?)?,
+            "--omit-bits" => a.omit_bits = true,
             "--family" => a.family = value()?,
             "--target" => a.target = value()?,
             "--out" => a.out = PathBuf::from(value()?),
@@ -128,6 +137,12 @@ fn parse_probe(registry: &Registry, args: &[String]) -> Res<ProbeArgs> {
     }
     if a.baseline_step.is_nan() || a.baseline_step <= 0.0 {
         return Err("--baseline-step must be positive".into());
+    }
+    if registry.rendition_codec(a.rendition).is_none() {
+        return Err(format!(
+            "{:?} reference codec is not registered",
+            a.rendition
+        ));
     }
     Ok(a)
 }
@@ -316,7 +331,8 @@ fn probe(registry: &Registry, args: &[String]) -> Res<()> {
         let mut kept = Vec::new();
         for &i in order.iter().take(a.keep) {
             let (s, enc) = &results[i];
-            let file = write::build(fam.as_ref(), &reference, &id, Some(&a.target), s, enc)?;
+            let mut file = write::build(fam.as_ref(), &reference, &id, Some(&a.target), s, enc)?;
+            rendition::configure(registry, &mut file, a.rendition, a.omit_bits)?;
             let bytes = file.to_bytes().map_err(|e| e.to_string())?;
             let name = format!("{}-{:03}.evif", fam.name(), i);
             fs::write(dir.join(&name), &bytes).map_err(|e| format!("{name}: {e}"))?;
@@ -394,8 +410,22 @@ fn inspect(args: &[String]) -> Res<()> {
             ),
             None => println!("  bitstream: none"),
         }
+        println!(
+            "  reference decode: {:?} {} bytes",
+            f.rendition.format,
+            f.rendition.data.len()
+        );
+        if let Some(info) = f.bitstream_info {
+            println!(
+                "  recorded encoding: {} {} bytes xxh3={:016x}",
+                String::from_utf8_lossy(&info.codec),
+                info.bytes,
+                info.xxh3
+            );
+        }
         match f.bits_per_pixel() {
             Some(Bpp::Interior(b)) => println!("  interior bpp: {b:.4}"),
+            Some(Bpp::Recorded(b)) => println!("  recorded bpp: {b:.4} (candidate bytes omitted)"),
             Some(Bpp::Claimed(b)) => println!("  claimed bpp: {b:.4}"),
             None => println!("  bpp: unknown"),
         }
@@ -436,17 +466,11 @@ fn inspect(args: &[String]) -> Res<()> {
     Ok(())
 }
 
-fn verify(args: &[String]) -> Res<()> {
+fn verify(registry: &Registry, args: &[String]) -> Res<()> {
     let mut bad = 0;
     for p in args {
         match read(Path::new(p)).and_then(|f| {
-            let img = Rgb8Image::from_png(&f.png)?;
-            if (img.width, img.height) != (f.header.width, f.header.height) {
-                return Err("PIXL dimensions differ from HEAD".into());
-            }
-            if img.digest() != f.digests.distorted {
-                return Err("PIXL digest differs from DIGS".into());
-            }
+            rendition::decode(registry, &f)?;
             Ok(())
         }) {
             Ok(()) => println!("{p}: ok"),
@@ -462,33 +486,46 @@ fn verify(args: &[String]) -> Res<()> {
     Ok(())
 }
 
-fn extract(args: &[String]) -> Res<()> {
-    let [file, dir] = args else {
-        return Err("extract FILE.evif DIR".into());
+fn extract(registry: &Registry, args: &[String]) -> Res<()> {
+    let (positional, format, omit) = parse_storage_options(args)?;
+    let [file, dir] = positional.as_slice() else {
+        return Err("extract FILE.evif DIR [--format png|imij|native|evif]".into());
     };
+    let explicit = format;
     let f = read(Path::new(file))?;
     let dir = Path::new(dir);
-    fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let stem = Path::new(file)
         .file_stem()
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_else(|| "file".into());
-    if let Some(b) = &f.bits {
-        let ext = String::from_utf8_lossy(&b.codec).trim().to_string();
-        let bit_dir = if ext.eq_ignore_ascii_case("png") {
-            let bit_dir = dir.join("bitstreams");
-            fs::create_dir_all(&bit_dir).map_err(|e| format!("{}: {e}", bit_dir.display()))?;
-            bit_dir
-        } else {
-            dir.to_path_buf()
-        };
-        let p = bit_dir.join(format!("{stem}.{ext}"));
-        fs::write(&p, &b.data).map_err(|e| format!("{}: {e}", p.display()))?;
-        println!("{}", p.display());
+    if let Some(format) = explicit {
+        let (extension, data) = export_file(registry, &f, &format, omit)?;
+        fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+        let path = dir.join(format!("{stem}.{extension}"));
+        write_new(&path, &data)?;
+        println!("{}", path.display());
+    } else {
+        if omit {
+            return Err("--omit-bits requires --format evif for extract".into());
+        }
+        fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+        let ext = f.rendition.format.extension();
+        if let Some(b) = &f.bits {
+            let bit_ext = rendition::bitstream_extension(&b.codec);
+            let bit_dir = if bit_ext == ext {
+                dir.join("bitstreams")
+            } else {
+                dir.to_path_buf()
+            };
+            fs::create_dir_all(&bit_dir).map_err(|e| e.to_string())?;
+            let path = bit_dir.join(format!("{stem}.{bit_ext}"));
+            write_new(&path, &b.data)?;
+            println!("{}", path.display());
+        }
+        let path = dir.join(format!("{stem}.{ext}"));
+        write_new(&path, &f.rendition.data)?;
+        println!("{}", path.display());
     }
-    let p = dir.join(format!("{stem}.png"));
-    fs::write(&p, &f.png).map_err(|e| format!("{}: {e}", p.display()))?;
-    println!("{}", p.display());
     if let Some(s) = &f.scores {
         let p = dir.join(format!("{stem}.scores.json"));
         fs::write(
@@ -501,6 +538,92 @@ fn extract(args: &[String]) -> Res<()> {
     Ok(())
 }
 
+fn write_new(path: &Path, data: &[u8]) -> Res<()> {
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .map_err(|e| format!("{}: {e}", path.display()))?;
+    file.write_all(data)
+        .map_err(|e| format!("{}: {e}", path.display()))
+}
+
+fn parse_storage_options(args: &[String]) -> Res<(Vec<String>, Option<String>, bool)> {
+    let mut positional = Vec::new();
+    let mut format = None;
+    let mut omit = false;
+    let mut it = args.iter();
+    while let Some(arg) = it.next() {
+        match arg.as_str() {
+            "--format" | "--rendition" => format = Some(it.next().ok_or("missing format")?.clone()),
+            "--omit-bits" => omit = true,
+            x if x.starts_with("--") => return Err(format!("unknown option {x}")),
+            _ => positional.push(arg.clone()),
+        }
+    }
+    Ok((positional, format, omit))
+}
+
+fn export_file(
+    registry: &Registry,
+    file: &Evif,
+    format: &str,
+    omit: bool,
+) -> Res<(String, Vec<u8>)> {
+    if omit && format != "evif" {
+        return Err("--omit-bits requires EVIF container output".into());
+    }
+    match format {
+        "native" => {
+            let bits = file
+                .bits
+                .as_ref()
+                .ok_or("original candidate bytes are not embedded")?;
+            Ok((
+                rendition::bitstream_extension(&bits.codec),
+                bits.data.clone(),
+            ))
+        }
+        "evif" => {
+            let mut file = file.clone();
+            if omit {
+                file.omit_bits();
+            }
+            Ok(("evif".into(), file.to_bytes().map_err(|e| e.to_string())?))
+        }
+        _ => {
+            let format = rendition::parse(format)?;
+            let data = if format == file.rendition.format {
+                file.rendition.data.clone()
+            } else {
+                let pixels = rendition::decode(registry, file)?;
+                rendition::encode(registry, format, &pixels)?.data
+            };
+            Ok((format.extension().into(), data))
+        }
+    }
+}
+
+fn repack(registry: &Registry, args: &[String]) -> Res<()> {
+    let (paths, format, omit) = parse_storage_options(args)?;
+    let [input, output] = paths.as_slice() else {
+        return Err("repack INPUT.evif OUTPUT.evif [--rendition png|imij] [--omit-bits]".into());
+    };
+    if Path::new(output).exists() {
+        return Err("output already exists; use a new path".into());
+    }
+    let mut file = read(Path::new(input))?;
+    if let Some(format) = format {
+        rendition::configure(registry, &mut file, rendition::parse(&format)?, omit)?;
+    } else if omit {
+        file.omit_bits();
+    }
+    write_new(
+        Path::new(output),
+        &file.to_bytes().map_err(|e| e.to_string())?,
+    )
+}
+
 /// Encode each image with explicit parameter vectors (one JSON object per
 /// line of `--params`) or the family's baseline at `--qualities`, and write
 /// the decoded renditions as PNG with a TSV of their sizes. The baseline
@@ -508,10 +631,20 @@ fn extract(args: &[String]) -> Res<()> {
 fn render(registry: &Registry, args: &[String]) -> Res<()> {
     let (mut family, mut out, mut qualities, mut params_file) = (None, None, None, None);
     let mut images = Vec::new();
+    let mut format = "png".to_string();
+    let mut reference_format = RenditionFormat::Png;
+    let mut omit_bits = false;
     let mut i = 0;
     while i < args.len() {
         let next = |i: usize| args.get(i + 1).cloned().ok_or_else(|| USAGE.to_string());
         match args[i].as_str() {
+            "--format" => format = next(i)?,
+            "--rendition" => reference_format = rendition::parse(&next(i)?)?,
+            "--omit-bits" => {
+                omit_bits = true;
+                i += 1;
+                continue;
+            }
             "--family" => family = Some(next(i)?),
             "--out" => out = Some(PathBuf::from(next(i)?)),
             "--qualities" => qualities = Some(next(i)?),
@@ -531,6 +664,27 @@ fn render(registry: &Registry, args: &[String]) -> Res<()> {
     let fam = registry
         .family(&family)
         .ok_or_else(|| format!("unknown family {family}"))?;
+    match format.as_str() {
+        "png" | "imij" => {
+            let f = rendition::parse(&format)?;
+            if registry.rendition_codec(f).is_none() {
+                return Err(format!("{f:?} reference codec is not registered"));
+            }
+        }
+        "native" if omit_bits => return Err("native output cannot omit candidate bytes".into()),
+        "native" => {}
+        "evif" => {
+            if registry.rendition_codec(reference_format).is_none() {
+                return Err(format!(
+                    "{reference_format:?} reference codec is not registered"
+                ));
+            }
+        }
+        _ => return Err("--format must be png, imij, native or evif".into()),
+    }
+    if images.is_empty() {
+        return Err("no images given".into());
+    }
     let mut jobs: Vec<(String, Value)> = Vec::new();
     match (qualities, params_file) {
         (Some(q), None) => {
@@ -555,13 +709,33 @@ fn render(registry: &Registry, args: &[String]) -> Res<()> {
     fs::create_dir_all(&out).map_err(|e| format!("{}: {e}", out.display()))?;
     let tsv_path = out.join("render.tsv");
     let fresh = !tsv_path.exists();
+    const COLUMNS: &str =
+        "image\ttag\tbytes\tbpp\tpng\tparams\tformat\tpath\tcodec\tencoded_xxh3\tbitstream";
+    if !fresh {
+        use std::io::BufRead;
+        let file = fs::File::open(&tsv_path).map_err(|e| e.to_string())?;
+        let header = std::io::BufReader::new(file)
+            .lines()
+            .next()
+            .transpose()
+            .map_err(|e| e.to_string())?;
+        if header.as_deref() != Some(COLUMNS) {
+            return Err(
+                "existing render.tsv has a different schema; choose a new output directory".into(),
+            );
+        }
+    }
     let mut tsv = fs::OpenOptions::new()
         .append(true)
         .create(true)
         .open(&tsv_path)
         .map_err(|e| format!("{}: {e}", tsv_path.display()))?;
     if fresh {
-        writeln!(tsv, "image\ttag\tbytes\tbpp\tpng\tparams").map_err(|e| e.to_string())?;
+        writeln!(
+            tsv,
+            "image\ttag\tbytes\tbpp\tpng\tparams\tformat\tpath\tcodec\tencoded_xxh3\tbitstream"
+        )
+        .map_err(|e| e.to_string())?;
     }
     for img_path in &images {
         let id = img_path
@@ -578,20 +752,66 @@ fn render(registry: &Registry, args: &[String]) -> Res<()> {
                     continue;
                 }
             };
-            let png = out.join(format!("{id}-{family}-{tag}.png"));
-            fs::write(&png, enc.pixels.to_png()?).map_err(|e| format!("{}: {e}", png.display()))?;
+            let (extension, data) = match format.as_str() {
+                "native" => {
+                    let bits = enc
+                        .bits
+                        .as_ref()
+                        .ok_or("family has no candidate bitstream for native output")?;
+                    (
+                        rendition::bitstream_extension(&bits.codec),
+                        bits.data.clone(),
+                    )
+                }
+                "evif" => {
+                    let sample = Sample {
+                        params: p.clone(),
+                        bpp: enc.bpp(),
+                        scores: Vec::new(),
+                        gain: BTreeMap::new(),
+                        disagreement: None,
+                    };
+                    let mut file =
+                        write::build(fam.as_ref(), &reference, &id, None, &sample, &enc)?;
+                    rendition::configure(registry, &mut file, reference_format, omit_bits)?;
+                    ("evif".into(), file.to_bytes().map_err(|e| e.to_string())?)
+                }
+                _ => {
+                    let fmt = rendition::parse(&format)?;
+                    (
+                        fmt.extension().into(),
+                        rendition::encode(registry, fmt, &enc.pixels)?.data,
+                    )
+                }
+            };
+            let path = out.join(format!("{id}-{family}-{tag}.{extension}"));
+            write_new(&path, &data)?;
+            let mut bitstream_path = String::new();
             if let Some(bits) = &enc.bits {
-                // A separate directory avoids colliding with the rendition when
-                // the encoded format itself is PNG.
-                let dir = out.join("bitstreams");
-                fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-                let ext = String::from_utf8_lossy(&bits.codec).trim().to_string();
-                let path = dir.join(format!("{id}-{family}-{tag}.{ext}"));
-                fs::write(&path, &bits.data).map_err(|e| format!("{}: {e}", path.display()))?;
+                if format == "native" {
+                    bitstream_path = path.display().to_string();
+                } else if format != "evif" && !omit_bits {
+                    let dir = out.join("bitstreams");
+                    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+                    let ext = rendition::bitstream_extension(&bits.codec);
+                    let bit_path = dir.join(format!("{id}-{family}-{tag}.{ext}"));
+                    write_new(&bit_path, &bits.data)?;
+                    bitstream_path = bit_path.display().to_string();
+                }
             }
+            let info = enc.bits.as_ref().map(BitstreamInfo::from_bitstream);
+            let codec = info
+                .map(|i| String::from_utf8_lossy(&i.codec).trim().to_string())
+                .unwrap_or_default();
+            let hash = info.map(|i| format!("{:016x}", i.xxh3)).unwrap_or_default();
+            let png = if format == "png" {
+                path.display().to_string()
+            } else {
+                String::new()
+            };
             let b = enc.bytes().map_or("nan".to_string(), |b| b.to_string());
             let bpp = enc.bpp().map_or("nan".to_string(), |v| format!("{v:.6}"));
-            writeln!(tsv, "{id}\t{tag}\t{b}\t{bpp}\t{}\t{p}", png.display())
+            writeln!(tsv, "{id}\t{tag}\t{b}\t{bpp}\t{png}\t{p}\t{format}\t{}\t{codec}\t{hash}\t{bitstream_path}", path.display())
                 .map_err(|e| e.to_string())?;
         }
         eprintln!("{id}: {} renditions", jobs.len());

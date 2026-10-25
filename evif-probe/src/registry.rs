@@ -5,11 +5,16 @@
 use crate::family::{self, Family};
 use crate::judge::{self, Judge};
 
+use crate::rendition::{self, RenditionCodec};
+use evif::RenditionFormat;
+
+type RenditionCtor = Box<dyn Fn() -> Box<dyn RenditionCodec>>;
 type FamilyCtor = Box<dyn Fn() -> Box<dyn Family>>;
 type JudgeCtor = Box<dyn Fn() -> Box<dyn Judge>>;
 
 #[derive(Default)]
 pub struct Registry {
+    renditions: Vec<(RenditionFormat, RenditionCtor)>,
     families: Vec<(String, FamilyCtor)>,
     judges: Vec<(String, JudgeCtor)>,
 }
@@ -18,6 +23,7 @@ impl Registry {
     /// Everything in this crate.
     pub fn builtin() -> Self {
         let mut r = Self::default();
+        r.add_rendition_codec(RenditionFormat::Png, || Box::new(rendition::Png));
         r.add_family("zenjpeg-expert", || {
             Box::new(family::zenjpeg_expert::ZenjpegExpert)
         });
@@ -32,6 +38,23 @@ impl Registry {
         r.add_judge("ssim2", || Box::new(judge::Ssim2));
         r.add_judge("butteraugli", || Box::new(judge::Butteraugli));
         r
+    }
+
+    /// Register a reference-decode codec without adding a candidate family.
+    pub fn add_rendition_codec(
+        &mut self,
+        format: RenditionFormat,
+        ctor: impl Fn() -> Box<dyn RenditionCodec> + 'static,
+    ) {
+        self.renditions.retain(|(f, _)| *f != format);
+        self.renditions.push((format, Box::new(ctor)));
+    }
+
+    pub fn rendition_codec(&self, format: RenditionFormat) -> Option<Box<dyn RenditionCodec>> {
+        self.renditions
+            .iter()
+            .find(|(f, _)| *f == format)
+            .map(|(_, ctor)| ctor())
     }
 
     /// Register a family under `name`; a later registration of the same name

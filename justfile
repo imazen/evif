@@ -12,16 +12,16 @@ build:
 
 test:
     {{heavy}} cargo test --all-targets
-    cargo test --doc
+    {{heavy}} cargo test --doc
 
 # The container crate alone, as published: no_std-clean and no default features.
 test-container:
-    cargo test -p evif
-    cargo build -p evif --no-default-features
+    {{heavy}} cargo test -p evif
+    {{heavy}} cargo build -p evif --no-default-features
 
 lint:
     cargo fmt --all --check
-    cargo clippy --all-targets -- -D warnings
+    {{heavy}} cargo clippy --all-targets -- -D warnings
 
 # A short probe over two corpus images; results land in out/smoke.
 smoke: build
