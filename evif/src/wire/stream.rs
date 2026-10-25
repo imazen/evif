@@ -100,7 +100,7 @@ fn transfer<R: Read, W: Write>(
         dest.write_all(&buf[..size])?;
         len -= size as u64;
     }
-    Ok(hash.map(|h| Hash(h.finalize().into())))
+    Ok(hash.map(|h| Hash::sha256(h.finalize().into())))
 }
 
 /// Sequential writer: no seek/backpatch and no whole-payload buffering. A failed

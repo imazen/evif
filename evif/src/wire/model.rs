@@ -1,5 +1,5 @@
 use alloc::{string::String, vec::Vec};
-use core::{fmt, str::FromStr};
+use core::fmt;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use sha2::{Digest, Sha256};
 use zenhash::Xxh3;
@@ -28,97 +28,153 @@ impl<'de> Deserialize<'de> for U64 {
     }
 }
 
-/// SHA-256, encoded as 64 lowercase hexadecimal characters in JSON.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Hash(pub [u8; 32]);
+/// Algorithm-tagged digest. Unknown algorithms and larger digests are preserved.
+/// JSON uses an explicit algorithm ID and a nonempty, even-length lowercase hex
+/// digest. Resource limits apply to the enclosing JSON, not a fixed hash width.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(try_from = "HashFields")]
+pub struct Hash {
+    algorithm: String,
+    digest: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct HashFields {
+    algorithm: String,
+    digest: String,
+}
+impl TryFrom<HashFields> for Hash {
+    type Error = Error;
+    fn try_from(fields: HashFields) -> Result<Self, Error> {
+        let hash = Self {
+            algorithm: fields.algorithm,
+            digest: fields.digest,
+        };
+        hash.validate()?;
+        Ok(hash)
+    }
+}
 impl Hash {
-    /// Hash exact object bytes (no domain prefix).
+    /// Construct a validated record; unknown algorithm IDs are permitted.
+    pub fn new(algorithm: &str, digest: &str) -> Result<Self, Error> {
+        HashFields {
+            algorithm: algorithm.into(),
+            digest: digest.into(),
+        }
+        .try_into()
+    }
+    /// Hash exact object bytes with SHA-256 (no domain prefix).
     pub fn of(bytes: &[u8]) -> Self {
-        Self(Sha256::digest(bytes).into())
+        Self::sha256(Sha256::digest(bytes).into())
+    }
+    /// Stable algorithm identifier. Unknown does not mean verified.
+    pub fn algorithm(&self) -> &str {
+        &self.algorithm
+    }
+    /// Canonical lowercase hexadecimal digest, in algorithm-defined byte order.
+    pub fn digest(&self) -> &str {
+        &self.digest
+    }
+    pub(crate) fn sha256(bytes: [u8; 32]) -> Self {
+        let mut digest = String::with_capacity(64);
+        use core::fmt::Write;
+        for byte in bytes {
+            write!(digest, "{byte:02x}").expect("String write");
+        }
+        Self {
+            algorithm: "sha256".into(),
+            digest,
+        }
+    }
+    fn validate(&self) -> Result<(), Error> {
+        let id = self.algorithm.as_bytes();
+        check(
+            !id.is_empty()
+                && id.len() <= 64
+                && id[0].is_ascii_lowercase()
+                && id
+                    .iter()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || *b == b'-'),
+            "invalid hash algorithm",
+        )?;
+        check(
+            !self.digest.is_empty()
+                && self.digest.len().is_multiple_of(2)
+                && self
+                    .digest
+                    .bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)),
+            "invalid hash digest",
+        )?;
+        let width = match self.algorithm.as_str() {
+            "xxh3-128" => Some(32),
+            "sha256" => Some(64),
+            _ => None,
+        };
+        check(
+            width.is_none_or(|n| self.digest.len() == n),
+            "hash algorithm/digest length mismatch",
+        )
+    }
+    pub(crate) fn require_sha256(&self) -> Result<(), Error> {
+        if self.algorithm != "sha256" {
+            return Err(Error::Unsupported(
+                "hash algorithm for payload/media verification",
+            ));
+        }
+        Ok(())
+    }
+    fn bind(&self, h: &mut Sha256) {
+        h.update((self.algorithm.len() as u64).to_le_bytes());
+        h.update(self.algorithm.as_bytes());
+        h.update((self.digest.len() as u64 / 2).to_le_bytes());
+        // The digest is validated ASCII hex. Bind its bytes, not its spelling.
+        for pair in self.digest.as_bytes().as_chunks::<2>().0 {
+            let nibble = |b: u8| if b <= b'9' { b - b'0' } else { b - b'a' + 10 };
+            h.update([(nibble(pair[0]) << 4) | nibble(pair[1])]);
+        }
     }
 }
 impl fmt::Display for Hash {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for byte in self.0 {
-            write!(f, "{byte:02x}")?;
-        }
-        Ok(())
-    }
-}
-impl FromStr for Hash {
-    type Err = Error;
-    fn from_str(text: &str) -> Result<Self, Error> {
-        check(
-            text.len() == 64
-                && text
-                    .bytes()
-                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)),
-            "invalid SHA-256",
-        )?;
-        let mut bytes = [0; 32];
-        for (i, byte) in bytes.iter_mut().enumerate() {
-            *byte = u8::from_str_radix(&text[i * 2..i * 2 + 2], 16)
-                .map_err(|_| Error::Invalid("invalid SHA-256"))?;
-        }
-        Ok(Self(bytes))
-    }
-}
-impl Serialize for Hash {
-    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        s.collect_str(self)
-    }
-}
-impl<'de> Deserialize<'de> for Hash {
-    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-        String::deserialize(d)?.parse().map_err(de::Error::custom)
+        write!(f, "{}:{}", self.algorithm, self.digest)
     }
 }
 
-/// Canonical XXH3-128 sample digest, serialized as 32 lowercase hex digits.
-/// Uses the default (zero) seed and standard XXH3 secret.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct SampleHash(pub u128);
-impl fmt::Display for SampleHash {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:032x}", self.0)
-    }
-}
-impl FromStr for SampleHash {
-    type Err = Error;
-    fn from_str(text: &str) -> Result<Self, Error> {
-        check(
-            text.len() == 32
-                && text
-                    .bytes()
-                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)),
-            "invalid XXH3-128",
-        )?;
-        u128::from_str_radix(text, 16)
-            .map(Self)
-            .map_err(|_| Error::Invalid("invalid XXH3-128"))
-    }
-}
-impl Serialize for SampleHash {
-    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        s.collect_str(self)
-    }
-}
-impl<'de> Deserialize<'de> for SampleHash {
-    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-        String::deserialize(d)?.parse().map_err(de::Error::custom)
-    }
-}
-
-/// Required canonical sample identity plus an optional independent check.
-/// Both algorithms consume the same frame descriptor and packed sample bytes.
-/// SHA-256 presence or value does not contribute to media identity.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+/// Canonical sample identity plus optional independent checks over the same bytes.
+/// Writers default to XXH3-128. Other algorithms are preserved without asserting
+/// that decoded samples were verified. Checks never contribute to media identity.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "SampleHashFields")]
 pub struct SampleHashes {
-    #[serde(rename = "xxh3-128")]
-    pub xxh3_128: SampleHash,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub sha256: Option<Hash>,
+    pub canonical: Hash,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub checks: Vec<Hash>,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SampleHashFields {
+    canonical: Hash,
+    #[serde(default)]
+    checks: Vec<Hash>,
+}
+impl TryFrom<SampleHashFields> for SampleHashes {
+    type Error = Error;
+    fn try_from(fields: SampleHashFields) -> Result<Self, Error> {
+        let mut algorithms = alloc::collections::BTreeSet::new();
+        algorithms.insert(fields.canonical.algorithm());
+        for hash in &fields.checks {
+            check(
+                algorithms.insert(hash.algorithm()),
+                "duplicate sample hash algorithm",
+            )?;
+        }
+        Ok(Self {
+            canonical: fields.canonical,
+            checks: fields.checks,
+        })
+    }
 }
 
 /// Positive reduced rational; units are defined by the containing field.
@@ -249,7 +305,7 @@ impl Asset {
     }
     pub(crate) fn hasher(&self) -> Sha256 {
         let mut h = Sha256::new();
-        h.update(b"EVIF/media/3\0");
+        h.update(b"EVIF/media/4\0");
         h.update([1, self.kind as u8]); // resolved-rgb profile revision
         h.update(self.width.to_le_bytes());
         h.update(self.height.to_le_bytes());
@@ -333,8 +389,11 @@ fn hash_frame(
         update(&samples_le[y * stride_bytes..y * stride_bytes + row]);
     }
     Ok(SampleHashes {
-        xxh3_128: SampleHash(xxh3.digest128()),
-        sha256: sha256.map(|h| Hash(h.finalize().into())),
+        canonical: Hash::new("xxh3-128", &alloc::format!("{:032x}", xxh3.digest128()))?,
+        checks: sha256
+            .into_iter()
+            .map(|h| Hash::sha256(h.finalize().into()))
+            .collect(),
     })
 }
 
@@ -352,7 +411,7 @@ impl Frame {
         if let Some(time) = self.duration {
             time.hash(h);
         }
-        h.update(self.samples.xxh3_128.0.to_le_bytes());
+        self.samples.canonical.bind(h);
     }
 }
 
@@ -361,9 +420,9 @@ impl Frame {
 #[non_exhaustive]
 pub enum Storage {
     /// Immediately followed by one PNGF or IMIJ record.
-    Embedded { sha256: Option<Hash> },
+    Embedded { hash: Option<Hash> },
     /// Never fetched automatically. Digest covers the exact external bytes.
-    External { uri: String, sha256: Hash },
+    External { uri: String, hash: Hash },
 }
 
 /// One independently decodable segment. Subrectangles, posters and codec
@@ -382,7 +441,7 @@ pub struct Segment {
 #[serde(deny_unknown_fields)]
 pub struct MediaRoot {
     pub asset: u32,
-    pub sha256: Hash,
+    pub hash: Hash,
 }
 
 /// Container-defined envelope; `data` is an adapter-owned JSON object. The

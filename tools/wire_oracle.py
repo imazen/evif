@@ -51,7 +51,7 @@ def code(value, names):
 
 def initial_hash(a):
     assert a["profile"] == "resolved-rgb/1"
-    h = hashlib.sha256(b"EVIF/media/3\0")
+    h = hashlib.sha256(b"EVIF/media/4\0")
     h.update(bytes([1, code(a["kind"], "still sequence")]))
     h.update(struct.pack("<II", a["width"], a["height"]))
     h.update(bytes([
@@ -85,6 +85,31 @@ def xxh3(data):
     function.restype = Xxh128
     digest = function(data, len(data))
     return f"{digest.high64:016x}{digest.low64:016x}"
+
+
+def parse_hash(value):
+    assert set(value) == {"algorithm", "digest"}
+    algorithm, digest = value["algorithm"], value["digest"]
+    assert isinstance(algorithm, str) and 1 <= len(algorithm) <= 64
+    assert algorithm[0] in "abcdefghijklmnopqrstuvwxyz"
+    assert all(c in "abcdefghijklmnopqrstuvwxyz0123456789-" for c in algorithm)
+    assert isinstance(digest, str) and digest and len(digest) % 2 == 0
+    assert all(c in "0123456789abcdef" for c in digest)
+    if algorithm in {"sha256", "xxh3-128"}:
+        assert len(digest) == {"sha256":64, "xxh3-128":32}[algorithm]
+    return algorithm.encode("ascii"), bytes.fromhex(digest)
+
+
+def verify_hash(value, data):
+    parse_hash(value)
+    algorithm = value["algorithm"]
+    if algorithm == "sha256":
+        actual = hashlib.sha256(data).hexdigest()
+    elif algorithm == "xxh3-128":
+        actual = xxh3(data)
+    else:
+        raise ValueError(f"unsupported verification algorithm: {algorithm}")
+    assert actual == value["digest"]
 
 
 def check_apng(a, segment, body, path):
@@ -134,9 +159,10 @@ def check_apng(a, segment, body, path):
     prefix = b"EVIF/frame/1\0" + struct.pack("<IIBB", a["width"], a["height"], 4, 2)
     for i, frame in enumerate(segment["frames"]):
         canonical = prefix + decoded[i*size:(i+1)*size]
-        assert xxh3(canonical) == frame["samples"]["xxh3-128"]
-        if frame["samples"].get("sha256") is not None:
-            assert hashlib.sha256(canonical).hexdigest() == frame["samples"]["sha256"]
+        verify_hash(frame["samples"]["canonical"], canonical)
+        for check in frame["samples"].get("checks", []):
+            verify_hash(check, canonical)
+
 
 
 def inspect(path, decode_apng=False):
@@ -152,9 +178,9 @@ def inspect(path, decode_apng=False):
             records += 1
             if pending is not None:
                 assert tag == (b"IMIJ" if pending["carrier"] == "imi" else b"PNGF")
-                expected = pending["storage"].get("sha256")
+                expected = pending["storage"].get("hash")
                 if expected is not None:
-                    assert hashlib.sha256(body).hexdigest() == expected
+                    verify_hash(expected, body)
                 if decode_apng:
                     check_apng(assets[pending["asset"]], pending, body, path)
                     decoded_segments += 1
@@ -176,21 +202,30 @@ def inspect(path, decode_apng=False):
                     hashes[key].update(bytes([duration is not None]))
                     if duration is not None:
                         hashes[key].update(ratio(duration))
-                    sample_hash = frame["samples"]["xxh3-128"]
-                    assert len(sample_hash) == 32 and all(c in "0123456789abcdef" for c in sample_hash)
-                    hashes[key].update(int(sample_hash, 16).to_bytes(16, "little"))
+                    sample = frame["samples"]
+                    algorithm, digest = parse_hash(sample["canonical"])
+                    seen = {algorithm}
+                    for check in sample.get("checks", []):
+                        name, _ = parse_hash(check)
+                        assert name not in seen
+                        seen.add(name)
+                    hashes[key].update(struct.pack("<Q", len(algorithm)))
+                    hashes[key].update(algorithm)
+                    hashes[key].update(struct.pack("<Q", len(digest)))
+                    hashes[key].update(digest)
                     counts[key] += 1
                 if value["storage"]["kind"] == "embedded":
                     pending = value
                 else:
+                    parse_hash(value["storage"]["hash"])
                     assert not decode_apng, "external samples unavailable to oracle"
             elif tag == b"MEND":
                 assert not ended
                 assert all(counts[k] == u64(a["frame_count"]) for k, a in assets.items())
-                assert value == [{"asset":k,"sha256":hashes[k].hexdigest()} for k in sorted(assets)]
+                assert value == [{"asset":k,"hash":{"algorithm":"sha256","digest":hashes[k].hexdigest()}} for k in sorted(assets)]
                 ended = True
             elif tag == b"scor":
-                assert ended and value["candidate"] in [h.hexdigest() for h in hashes.values()]
+                assert ended and value["candidate"] in [{"algorithm":"sha256","digest":h.hexdigest()} for h in hashes.values()]
                 assert value["id"] not in scores
                 assert value.get("supersedes") is None or value["supersedes"] in scores
                 scores.append(value["id"])

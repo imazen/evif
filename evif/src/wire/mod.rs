@@ -292,7 +292,12 @@ impl State {
                     }
                 }
                 match &segment.storage {
-                    Storage::Embedded { .. } => self.pending = Some(segment),
+                    Storage::Embedded { hash } => {
+                        if let Some(hash) = hash {
+                            hash.require_sha256()?;
+                        }
+                        self.pending = Some(segment);
+                    }
                     Storage::External { uri, .. } => {
                         check(!uri.is_empty(), "empty external URI")?;
                         self.commit_segment(segment, None);
@@ -301,6 +306,9 @@ impl State {
             }
             b"MEND" => {
                 let roots: Vec<MediaRoot> = decode_json(body)?;
+                for root in &roots {
+                    root.hash.require_sha256()?;
+                }
                 check(roots == self.roots()?, "MEND media roots differ")?;
                 self.index.roots = roots;
                 self.ended = true;
@@ -317,7 +325,7 @@ impl State {
                 )?;
                 check(score.data.is_object(), "score data must be a JSON object")?;
                 check(
-                    self.index.roots.iter().any(|r| r.sha256 == score.candidate),
+                    self.index.roots.iter().any(|r| r.hash == score.candidate),
                     "score candidate is not in media section",
                 )?;
                 check(
@@ -354,16 +362,19 @@ impl State {
             .segments
             .push(IndexedSegment { segment, payload });
     }
-    fn expected_payload_hash(&self) -> Option<Hash> {
-        self.pending.as_ref().and_then(|s| match s.storage {
-            Storage::Embedded { sha256 } => sha256,
+    fn expected_payload_hash(&self) -> Option<&Hash> {
+        self.pending.as_ref().and_then(|s| match &s.storage {
+            Storage::Embedded { hash } => hash.as_ref(),
             _ => None,
         })
     }
     fn payload(&mut self, span: Span, actual: Option<Hash>) -> Result<(), Error> {
         check(span.length > 0, "empty rendition payload")?;
         if let Some(expected) = self.expected_payload_hash() {
-            check(actual == Some(expected), "payload SHA-256 mismatch")?;
+            check(
+                actual.as_ref() == Some(expected),
+                "payload SHA-256 mismatch",
+            )?;
         }
         let segment = self
             .pending
@@ -408,7 +419,7 @@ impl State {
                 )?;
                 Ok(MediaRoot {
                     asset: id,
-                    sha256: Hash(p.hasher.clone().finalize().into()),
+                    hash: Hash::sha256(p.hasher.clone().finalize().into()),
                 })
             })
             .collect()

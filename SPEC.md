@@ -89,8 +89,31 @@ JSON object. Nullable fields may be omitted and mean null.
 All u64 quantities are decimal **strings**, digits only, without leading zero
 except `"0"`, in range 0..18446744073709551615. u32 quantities are JSON integers.
 A rational is `{"num":"1001","den":"30000"}`: positive reduced u64 values.
-SHA-256 hashes are exactly 64 lowercase hexadecimal characters; XXH3-128 hashes
-are exactly 32, the zero-padded hexadecimal representation of the unsigned digest.
+Every hash uses the same object, including sample, payload, media and score-reference hashes:
+
+```json
+{"algorithm":"xxh3-128","digest":"0123456789abcdeffedcba9876543210"}
+```
+
+`algorithm` is a case-sensitive ASCII identifier, 1..64 bytes, matching
+`[a-z][a-z0-9-]*`. `digest` is a nonempty, even-length lowercase hexadecimal
+string. There is no fixed digest-width ceiling in the wire grammar; readers
+apply their enclosing JSON resource limits before allocation. Algorithm IDs
+identify the complete algorithm, output width and fixed parameters; a new mode,
+seed convention or XOF output width requires a distinct ID, not inferred defaults.
+
+Registered algorithms:
+
+| ID | Digest bytes | Parameters and byte order |
+|---|---:|---|
+| `xxh3-128` | 16 | Standard default secret, zero seed (`XXH3_128bits`); high 64-bit half then low half, each big-endian |
+| `sha256` | 32 | Standard initialization and digest byte order |
+
+Known IDs require their exact lengths. Unknown IDs are retained verbatim with
+all digest bytes, without claiming verification. Hash equality includes both
+algorithm and digest. Optional fields below are nullable only where stated;
+`checks` is an array and may be omitted, but may not be null.
+
 No canonical JSON is
 required; whitespace/key order do not affect media identity. Exact pass-through
 retains original record bytes, since reserialization can change numeric spelling.
@@ -142,9 +165,12 @@ Mastering peak is not the experimental display. No redundant HDR flag is require
   "carrier": "apng",
   "frames": [
     {"duration":{"num":"1001","den":"30000"},
-     "samples":{"xxh3-128":"<32 lowercase hex digits>","sha256":"<64 lowercase hex digits>"}}
+     "samples":{
+       "canonical":{"algorithm":"xxh3-128","digest":"<32 lowercase hex digits>"},
+       "checks":[{"algorithm":"sha256","digest":"<64 lowercase hex digits>"}]
+     }}
   ],
-  "storage": {"kind":"embedded","sha256":null}
+  "storage": {"kind":"embedded","hash":null}
 }
 ```
 
@@ -158,12 +184,18 @@ separate profile.
 Carriers: `png` = one integer frame; `apng` = integer frames; `imi` = integer or
 float frames. Embedded storage must immediately precede its matching PNGF/IMIJ
 record. The body is the carrier file without another wrapper, and must be nonempty.
-Optional `sha256` covers those exact bytes.
+Optional `hash` covers those exact bytes.
 
 External storage instead has exactly `kind:"external"`, nonempty `uri`, and a
-required `sha256` over the external carrier's exact bytes. No payload record
+required `hash` over the external carrier's exact bytes. No payload record
 follows. Readers do not automatically fetch URIs. Missing objects mean unavailable
 samples, never permission to substitute a similarly named file.
+
+The current verified reader/writer supports `sha256` for embedded payload checks.
+An unsupported embedded-payload algorithm returns an explicit unsupported error,
+not success or a mismatch. External payload hashes can use unknown algorithms
+because the container reader does not fetch or verify those objects. The hash
+record itself remains parseable independently of algorithm support.
 
 Each segment is independently decodable. Read it once; expand blend/disposal to
 complete canvases and exclude a nonparticipating APNG poster. Decoded frame count,
@@ -182,14 +214,20 @@ optional index may accelerate seeking, but must match the actual records.
 
 ## 6. Sample and media hashes
 
-XXH3-128 is the canonical decoded-sample digest. The `samples` object requires
-`xxh3-128`; `sha256` is an optional additional check over exactly the same bytes.
-Omission or null means no SHA-256 check is recorded. Writers should emit both by
-default, but readers may verify either or both and must report which they checked.
-If both are checked, both must match. Container parsing alone verifies neither
-against decoded samples.
+The `samples` object requires a `canonical` hash record and permits `checks`,
+an array of additional hash records (default empty). XXH3-128 is the default
+canonical algorithm; writers should add a SHA-256 check. Every entry covers the
+same canonical frame bytes. No algorithm ID may occur twice, including between
+`canonical` and `checks`.
 
-Canonical frame bytes for both algorithms:
+Other canonical algorithms, including unknown algorithms and longer digests,
+are preserved. A transport reader can bind them into media identity without
+knowing how to compute them. It does not thereby verify decoded samples.
+Sample verifiers must report which algorithms were checked and which are
+unsupported; every check they perform must match. They must not label an
+unsupported algorithm as verified or quietly substitute another algorithm.
+
+Canonical frame bytes for every sample-hash entry:
 
 ```
 "EVIF/frame/1\0" || width:u32 || height:u32 || channels:u8 || samples:u8
@@ -204,7 +242,7 @@ channels gray=1, gray-alpha=2, rgb=3, rgba=4; samples u8=1, u16=2, f16=3, f32=4.
 Media digest is SHA-256 over this binary concatenation, integers LE:
 
 ```
-"EVIF/media/3\0"
+"EVIF/media/4\0"
 profile-code:u8 = 1
 kind:u8                   still=1, sequence=2
 width:u32 height:u32
@@ -218,35 +256,44 @@ frame-count:u64
 plays-present:u8          0/1; if 1, plays:u64
 for each frame in presentation order:
     duration-present:u8   0/1; if 1, num:u64 den:u64
-    frame-xxh3-128:u128
+    algorithm-length:u64
+    algorithm:bytes      ASCII ID, exactly algorithm-length bytes
+    digest-length:u64
+    digest:bytes         decoded hex, exactly digest-length bytes
 ```
 
-Serialize the 128-bit sample digest as 16 little-endian bytes: the low 64-bit
-half first, then the high 64-bit half, both little-endian. JSON hex instead
-prints the numeric value most-significant digit first (high half then low half).
+Length-prefix the algorithm and digest independently. Digest bytes follow the
+hex string from left to right; there is no integer-endian reversal. Thus an
+XXH3-128 value contributes its high half first, unlike the earlier draft's
+little-endian u128. These rules also bind unknown algorithms and longer digests
+without truncation or ambiguous concatenation.
 
-Exclude optional sample SHA-256 checks, local ID, storage compression/segmentation,
+Exclude all optional sample `checks`, local ID, storage compression/segmentation,
 paths, BITS and scores. Include canonical sample digests, interpretation, timing
-and looping. Adding or removing optional SHA-256 checks does not change identity.
+and looping. Adding, removing or reordering optional checks does not change identity.
 Identical assets may have
 identical media hashes under different IDs. Lossless repacking preserves identity.
 
-The media root uses SHA-256 over XXH3 sample digests. It is not a cryptographic
+The current media root uses SHA-256 over the canonical hash records. With the
+default XXH3-128 canonical algorithm, it is not a cryptographic
 commitment to the raw samples: a sample XXH3 collision also survives this root.
 Optional frame SHA-256 checks independently detect differences when verified.
-External payload SHA-256 hashes still address the exact external bytes. None of
+External payload hashes still address the exact external bytes. None of
 these hashes authenticates a producer. Metadata records have no required hash;
 notes and scores can change independently of media.
 
-This unreleased draft uses XXH3-128 instead of the earlier XXH3-64 sample
-object or SHA-only `samples` string. The media-hash domain is revision 3. Old
-draft files must be regenerated from decoded samples; neither SHA-256 nor
-XXH3-64 can be converted to XXH3-128.
-The file header remains wire major 1, minor 0. Old/new sample schemas are refused
-by readers expecting the other draft, rather than silently reinterpreted.
+This unreleased draft replaces algorithm-specific fields and bare hash strings
+with tagged records, and changes the media-hash domain to revision 4. Existing
+XXH3-128/SHA-256 digests can be wrapped without rehashing samples, but media roots
+and score references must be recomputed. XXH3-64 cannot be converted to XXH3-128;
+that older draft still requires decoded samples. The header remains wire major 1,
+minor 0. Older schemas are refused rather than silently reinterpreted.
 
-MEND is `[{"asset":1,"sha256":"..."}, ...]`: exactly one entry per declared asset,
-sorted by numeric asset ID. Require full coverage and match each computed root.
+MEND is `[{"asset":1,"hash":{"algorithm":"sha256","digest":"..."}}, ...]`:
+exactly one entry per asset, sorted by numeric asset ID. Require full coverage and
+match each computed root, including its algorithm. The current implementation
+supports `sha256` media roots and reports other root algorithms as unsupported.
+The record shape accommodates future root algorithms without widening a field.
 MEND closes the media description; it does not prove the carrier decodes to the
 claimed samples.
 
@@ -269,8 +316,8 @@ count rendition storage as candidate codec cost.
 | schema | u32, currently 1 |
 | id | Unique nonempty string, at most 256 UTF-8 bytes |
 | supersedes | Null or ID of an earlier score record |
-| candidate | Media SHA-256 present in this file's MEND |
-| reference | Media SHA-256 or null; may identify an external reference |
+| candidate | Hash object matching a media root in this file's MEND, including algorithm |
+| reference | Hash object or null; may identify an external reference using an unknown algorithm |
 | adapter | Nonempty adapter/schema identifier |
 | data | Adapter-owned object: preparation, viewing conditions, implementation/model, results, diagnostics |
 

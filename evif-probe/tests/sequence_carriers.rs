@@ -156,7 +156,7 @@ fn verify_wire_round_trip(
             carrier: Carrier::Apng,
             frames: frames.clone(),
             storage: Storage::Embedded {
-                sha256: Some(Hash::of(encoded)),
+                hash: Some(Hash::of(encoded)),
             },
         };
         writer
@@ -170,15 +170,15 @@ fn verify_wire_round_trip(
         schema: 1,
         id: "fixture-metadata".into(),
         supersedes: None,
-        candidate: roots[1].sha256,
-        reference: Some(roots[0].sha256),
+        candidate: roots[1].hash.clone(),
+        reference: Some(roots[0].hash.clone()),
         adapter: "transport-test/1".into(),
         data: serde_json::json!({"status":"not-scored"}),
     };
     writer.score(&score).unwrap();
     let (bytes, _) = writer.finish().unwrap();
     let index = scan(&bytes, Limits::default()).unwrap();
-    assert_eq!(index.roots[0].sha256, index.roots[1].sha256);
+    assert_eq!(index.roots[0].hash, index.roots[1].hash);
     for s in &index.segments {
         let span = s.payload.unwrap();
         let payload = &bytes[span.offset as usize..(span.offset + span.length) as usize];

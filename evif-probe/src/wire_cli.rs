@@ -69,7 +69,7 @@ pub(crate) fn run(args: &[String]) -> Res<()> {
                     a.primaries,
                     a.transfer,
                     a.frame_count.0,
-                    root.sha256
+                    root.hash
                 );
             }
             println!(
@@ -146,7 +146,7 @@ fn pack(plan_path: &Path, output: &Path) -> Res<()> {
         let roots = writer.finish_media()?;
         writer.finish()?;
         for root in roots {
-            println!("asset {} media {}", root.asset, root.sha256);
+            println!("asset {} media {}", root.asset, root.hash);
         }
         Ok(())
     })();

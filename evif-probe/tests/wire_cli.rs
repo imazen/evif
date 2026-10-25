@@ -35,7 +35,7 @@ fn pack_and_append_preserve_payloads_and_refuse_overwrites() {
             samples: frame_hash(&a, &image.data, 9).unwrap(),
         }],
         storage: Storage::Embedded {
-            sha256: Some(Hash::of(&png)),
+            hash: Some(Hash::of(&png)),
         },
     };
     let plan = serde_json::json!({"assets":[a], "segments":[{"segment":s,"path":"input.png"}],
@@ -67,7 +67,7 @@ fn pack_and_append_preserve_payloads_and_refuse_overwrites() {
         schema: 1,
         id: "test".into(),
         supersedes: None,
-        candidate: index.roots[0].sha256,
+        candidate: index.roots[0].hash.clone(),
         reference: None,
         adapter: "example/1".into(),
         data: serde_json::json!({"status":"not-scored","number":0.000001}),

@@ -59,16 +59,31 @@ fn sample_hashes_match_independent_algorithms_and_exclude_padding() {
             }
             let both = frame_hash(&a, &padded, stride).unwrap();
             let fast = frame_hash_xxh3(&a, &padded, stride).unwrap();
-            assert_eq!(both.xxh3_128.0, xxhash_rust::xxh3::xxh3_128(&canonical));
-            assert_eq!(both.sha256, Some(Hash(Sha256::digest(&canonical).into())));
-            assert_eq!(fast.xxh3_128, both.xxh3_128);
-            assert_eq!(fast.sha256, None);
+            assert_eq!(
+                both.canonical.digest(),
+                format!("{:032x}", xxhash_rust::xxh3::xxh3_128(&canonical))
+            );
+            assert_eq!(
+                both.checks,
+                vec![
+                    Hash::new(
+                        "sha256",
+                        &Sha256::digest(&canonical)
+                            .iter()
+                            .map(|b| format!("{b:02x}"))
+                            .collect::<String>()
+                    )
+                    .unwrap()
+                ]
+            );
+            assert_eq!(fast.canonical, both.canonical);
+            assert!(fast.checks.is_empty());
             padded[row] ^= 1; // padding is not a sample
             assert_eq!(frame_hash(&a, &padded, stride).unwrap(), both);
             padded[0] ^= 1;
             let changed = frame_hash(&a, &padded, stride).unwrap();
-            assert_ne!(changed.xxh3_128, both.xxh3_128);
-            assert_ne!(changed.sha256, both.sha256);
+            assert_ne!(changed.canonical, both.canonical);
+            assert_ne!(changed.checks, both.checks);
         }
     }
 }
@@ -80,10 +95,13 @@ fn optional_sample_sha_does_not_change_identity_but_canonical_xxh3_does() {
         let mut s = segment(&a, b"x");
         for f in &mut s.frames {
             match mode {
-                1 => f.samples.sha256 = None,
-                2 => f.samples.sha256 = Some(Hash::of(b"different check")),
-                3 => f.samples.xxh3_128.0 ^= 1,
-                4 => f.samples.xxh3_128.0 ^= 1u128 << 127,
+                1 => f.samples.checks.clear(),
+                2 => f.samples.checks = vec![Hash::of(b"different check")],
+                3 | 4 => {
+                    let value = u128::from_str_radix(f.samples.canonical.digest(), 16).unwrap();
+                    let value = value ^ if mode == 3 { 1 } else { 1u128 << 127 };
+                    f.samples.canonical = Hash::new("xxh3-128", &format!("{value:032x}")).unwrap();
+                }
                 _ => (),
             }
         }
@@ -103,15 +121,15 @@ fn optional_sample_sha_does_not_change_identity_but_canonical_xxh3_does() {
 }
 
 #[test]
-fn sample_hash_json_requires_canonical_xxh3_even_with_sha256() {
+fn sample_hash_json_requires_algorithm_and_valid_digest() {
     let fast = SampleHashes {
-        xxh3_128: SampleHash(0x0123456789abcdef_fedcba9876543210),
-        sha256: None,
+        canonical: Hash::new("xxh3-128", "0123456789abcdeffedcba9876543210").unwrap(),
+        checks: vec![],
     };
     let encoded = serde_json::to_string(&fast).unwrap();
     assert_eq!(
         encoded,
-        r#"{"xxh3-128":"0123456789abcdeffedcba9876543210"}"#
+        r#"{"canonical":{"algorithm":"xxh3-128","digest":"0123456789abcdeffedcba9876543210"}}"#
     );
     assert_eq!(
         serde_json::from_str::<SampleHashes>(&encoded).unwrap(),
@@ -121,35 +139,182 @@ fn sample_hash_json_requires_canonical_xxh3_even_with_sha256() {
         r#"{}"#,
         r#"{"sha256":null}"#,
         r#"{"xxh3-64":"0123456789abcdef"}"#,
-        r#"{"xxh3-128":"0123456789abcdef"}"#,
-        r#"{"xxh3-128":"00123456789abcdeffedcba9876543210"}"#,
-        r#"{"xxh3-128":"000123456789abcdeffedcba9876543210","xxh3-64":"0123456789abcdef"}"#,
-        r#"{"xxh3-128":123}"#,
-        r#"{"xxh3-128":"0123456789ABCDEFFEDCBA9876543210"}"#,
-        r#"{"xxh3-128":"1234"}"#,
-        r#"{"xxh3-128":"0123456789abcdeffedcba9876543210","sha256":"bad"}"#,
-        r#"{"xxh3-128":"0123456789abcdeffedcba9876543210","other":1}"#,
-        r#""0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef""#,
+        r#"{"xxh3-128":"0123456789abcdeffedcba9876543210"}"#,
+        r#"{"canonical":123}"#,
+        r#"{"canonical":"0123456789abcdeffedcba9876543210"}"#,
+        r#"{"canonical":{"algorithm":"xxh3-128","digest":"0123456789abcdeffedcba9876543210"},"other":1}"#,
+        r#"{"canonical":{"algorithm":"xxh3-128","digest":"0123456789abcdeffedcba9876543210"},"checks":[{"algorithm":"xxh3-128","digest":"0123456789abcdeffedcba9876543210"}]}"#,
     ] {
         assert!(
             serde_json::from_str::<SampleHashes>(invalid).is_err(),
             "{invalid}"
         );
     }
+    for invalid in [
+        r#"{"algorithm":"","digest":"00"}"#,
+        r#"{"algorithm":"SHA256","digest":"00"}"#,
+        r#"{"algorithm":"1hash","digest":"00"}"#,
+        r#"{"algorithm":"hash/name","digest":"00"}"#,
+        r#"{"algorithm":"future","digest":""}"#,
+        r#"{"algorithm":"future","digest":"0"}"#,
+        r#"{"algorithm":"future","digest":"AA"}"#,
+        r#"{"algorithm":"future","digest":"zz"}"#,
+        r#"{"algorithm":"future","digest":"é"}"#,
+        r#"{"algorithm":"xxh3-128","digest":"0123456789abcdef"}"#,
+        r#"{"algorithm":"sha256","digest":"0123456789abcdeffedcba9876543210"}"#,
+        r#"{"algorithm":"future","digest":"00","other":1}"#,
+        r#"{"algorithm":"future"}"#,
+        r#"{"digest":"00"}"#,
+        r#"{"algorithm":"future","digest":0}"#,
+        r#"{"algorithm":"future","algorithm":"future","digest":"00"}"#,
+    ] {
+        assert!(serde_json::from_str::<Hash>(invalid).is_err(), "{invalid}");
+    }
+    assert!(Hash::new(&"a".repeat(65), "00").is_err());
 }
 
 #[test]
 fn sample_hash_full_width_and_zero_padding_are_canonical() {
-    for (value, text) in [
-        (0, "00000000000000000000000000000000"),
-        (1, "00000000000000000000000000000001"),
-        (1u128 << 64, "00000000000000010000000000000000"),
-        (u128::MAX, "ffffffffffffffffffffffffffffffff"),
+    for text in [
+        "00000000000000000000000000000000",
+        "00000000000000000000000000000001",
+        "00000000000000010000000000000000",
+        "ffffffffffffffffffffffffffffffff",
     ] {
-        assert_eq!(SampleHash(value).to_string(), text);
-        assert_eq!(text.parse::<SampleHash>().unwrap(), SampleHash(value));
+        let hash = Hash::new("xxh3-128", text).unwrap();
+        assert_eq!(hash.digest(), text);
+        assert_eq!(
+            serde_json::from_str::<Hash>(&serde_json::to_string(&hash).unwrap()).unwrap(),
+            hash
+        );
     }
 }
+
+#[test]
+fn future_hash_widths_round_trip_and_bind_algorithm_and_every_byte() {
+    let a = asset(1, Kind::Still);
+    let out = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join(format!("future-hashes-{}", std::process::id()));
+    std::fs::create_dir(&out).unwrap();
+    let make = |canonical: Hash, checks: Vec<Hash>| {
+        let mut s = segment(&a, b"x");
+        s.frames[0].samples = SampleHashes { canonical, checks };
+        // An external address may also use an algorithm unavailable locally.
+        s.storage = Storage::External {
+            uri: "https://example.invalid/future.imi".into(),
+            hash: Hash::new("future-payload", &"be".repeat(64)).unwrap(),
+        };
+        let mut writer = Writer::new(Vec::new(), Limits::default()).unwrap();
+        writer.asset(&a).unwrap();
+        writer.segment(&s, &mut io::empty(), 0).unwrap();
+        writer.finish_media().unwrap();
+        let (bytes, index) = writer.finish().unwrap();
+        for decoded in [
+            scan(&bytes, Limits::default()).unwrap(),
+            read(&mut Cursor::new(&bytes), Limits::default()).unwrap(),
+        ] {
+            assert_eq!(decoded.segments[0].segment, s);
+            assert_eq!(decoded.roots, index.roots);
+        }
+        assert!(matches!(
+            scan(
+                &bytes,
+                Limits {
+                    max_json_bytes: 100,
+                    ..Limits::default()
+                }
+            ),
+            Err(Error::Limit(_))
+        ));
+        (index.roots[0].hash.clone(), bytes)
+    };
+    // 256, 512, 1024 and 4096 bits; there is no 128/256-bit storage ceiling.
+    for bytes in [32, 64, 128, 512] {
+        let text = "a5".repeat(bytes);
+        let hash = Hash::new("future-hash", &text).unwrap();
+        let (baseline, encoded) = make(hash.clone(), vec![]);
+        std::fs::write(out.join(format!("digest-{}.evif", bytes * 8)), encoded).unwrap();
+        assert_eq!(
+            baseline,
+            make(
+                hash.clone(),
+                vec![Hash::new("future-check", &"3c".repeat(bytes)).unwrap()]
+            )
+            .0
+        );
+        assert_ne!(
+            baseline,
+            make(Hash::new("another-hash", &text).unwrap(), vec![]).0
+        );
+        assert_ne!(
+            baseline,
+            make(
+                Hash::new("future-hash", &(text.clone() + "00")).unwrap(),
+                vec![]
+            )
+            .0
+        );
+        let mut changed = text;
+        changed.replace_range(bytes * 2 - 2.., "a4");
+        assert_ne!(
+            baseline,
+            make(Hash::new("future-hash", &changed).unwrap(), vec![]).0
+        );
+    }
+}
+
+#[test]
+fn unsupported_verification_algorithms_and_duplicate_checks_are_refused() {
+    let a = asset(1, Kind::Still);
+    let mut s = segment(&a, b"x");
+    s.frames[0].samples.checks = vec![Hash::of(b"first"), Hash::of(b"second")];
+    let mut writer = Writer::new(Vec::new(), Limits::default()).unwrap();
+    writer.asset(&a).unwrap();
+    assert!(writer.segment(&s, &mut &b"x"[..], 1).is_err());
+
+    let mut s = segment(&a, b"x");
+    s.storage = Storage::Embedded {
+        hash: Some(Hash::new("future-payload", &"ab".repeat(64)).unwrap()),
+    };
+    let mut writer = Writer::new(Vec::new(), Limits::default()).unwrap();
+    writer.asset(&a).unwrap();
+    assert!(matches!(
+        writer.segment(&s, &mut &b"x"[..], 1),
+        Err(Error::Unsupported(_))
+    ));
+
+    let (bytes, _) = file();
+    for target in [b"SEGM", b"MEND"] {
+        let mut altered = HEADER.to_vec();
+        let mut pos = HEADER.len();
+        while pos < bytes.len() {
+            let tag: &[u8; 4] = bytes[pos..pos + 4].try_into().unwrap();
+            let length = u64::from_le_bytes(bytes[pos + 4..pos + 12].try_into().unwrap()) as usize;
+            let body = &bytes[pos + 12..pos + 12 + length];
+            if tag == target {
+                let mut value: serde_json::Value = serde_json::from_slice(body).unwrap();
+                if tag == b"SEGM" {
+                    value["storage"]["hash"]["algorithm"] = "future-payload".into();
+                } else {
+                    value[0]["hash"]["algorithm"] = "future-root".into();
+                }
+                altered.extend(raw(tag, &serde_json::to_vec(&value).unwrap()));
+            } else {
+                altered.extend(raw(tag, body));
+            }
+            pos += 12 + length;
+        }
+        assert!(matches!(
+            scan(&altered, Limits::default()),
+            Err(Error::Unsupported(_))
+        ));
+        assert!(matches!(
+            read(&mut Cursor::new(&altered), Limits::default()),
+            Err(Error::Unsupported(_))
+        ));
+    }
+}
+
 fn segment(a: &Asset, bytes: &[u8]) -> Segment {
     Segment {
         asset: a.id,
@@ -157,7 +322,7 @@ fn segment(a: &Asset, bytes: &[u8]) -> Segment {
         carrier: Carrier::Apng,
         frames: frames(a),
         storage: Storage::Embedded {
-            sha256: Some(Hash::of(bytes)),
+            hash: Some(Hash::of(bytes)),
         },
     }
 }
@@ -166,8 +331,8 @@ fn score(hash: Hash, id: &str) -> ScoreRecord {
         schema: 1,
         id: id.into(),
         supersedes: None,
-        candidate: hash,
-        reference: Some(hash),
+        candidate: hash.clone(),
+        reference: Some(hash.clone()),
         adapter: "test/1".into(),
         data: serde_json::json!({"view":{"ppd":60},"score":9.25}),
     }
@@ -205,7 +370,7 @@ fn symmetric_assets_stream_and_slice_have_identical_semantics() {
         assert_eq!(index.assets, expected.assets);
         assert_eq!(index.segments, expected.segments);
         assert_eq!(index.roots, expected.roots);
-        assert_eq!(index.roots[0].sha256, index.roots[1].sha256); // local IDs/roles not hashed
+        assert_eq!(index.roots[0].hash, index.roots[1].hash); // local IDs/roles not hashed
         assert_eq!(index.bitstreams[0].codec, *b"evif");
         let span = index.bitstreams[0].payload;
         assert_eq!(
@@ -221,11 +386,12 @@ fn symmetric_assets_stream_and_slice_have_identical_semantics() {
 fn append_preserves_media_bytes_and_identity_and_detects_partial_tail() {
     let (bytes, index) = file();
     let mut output = Cursor::new(bytes.clone());
-    let first = score(index.roots[0].sha256, "first");
+    let first = score(index.roots[0].hash.clone(), "first");
     append_score(&mut output, &first, Limits::default()).unwrap();
     let after_first = output.get_ref().len();
-    let mut second = score(first.candidate, "second");
+    let mut second = score(first.candidate.clone(), "second");
     second.supersedes = Some("first".into());
+    second.reference = Some(Hash::new("future-reference", &"bc".repeat(64)).unwrap());
     append_score(&mut output, &second, Limits::default()).unwrap();
     assert_eq!(&output.get_ref()[..bytes.len()], bytes);
     let got = scan(output.get_ref(), Limits::default()).unwrap();
@@ -243,6 +409,10 @@ fn append_preserves_media_bytes_and_identity_and_detects_partial_tail() {
     let before = output.get_ref().clone();
     assert!(append_score(&mut output, &first, Limits::default()).is_err());
     assert_eq!(output.get_ref(), &before); // duplicate refused before writing
+    let mut wrong = score(first.candidate.clone(), "wrong-algorithm");
+    wrong.candidate = Hash::new("future-root", first.candidate.digest()).unwrap();
+    assert!(append_score(&mut output, &wrong, Limits::default()).is_err());
+    assert_eq!(output.get_ref(), &before); // matching bytes cannot replace the algorithm
 }
 
 #[test]
@@ -262,7 +432,7 @@ fn every_media_truncation_and_forged_payload_hash_is_rejected() {
     let mut bad = bytes;
     let root_offset = bad
         .windows(64)
-        .position(|w| w == index.roots[0].sha256.to_string().as_bytes())
+        .position(|w| w == index.roots[0].hash.digest().as_bytes())
         .unwrap();
     bad[root_offset] = if bad[root_offset] == b'0' { b'1' } else { b'0' };
     assert!(
@@ -299,13 +469,13 @@ fn repacking_segmentation_and_external_storage_do_not_change_identity() {
             frames: vec![frame],
             storage: Storage::External {
                 uri: format!("https://example.invalid/{i}.png"),
-                sha256: Hash::of(&[i as u8]),
+                hash: Hash::of(&[i as u8]),
             },
         };
         w.segment(&s, &mut io::empty(), 0).unwrap();
     }
     let roots = w.finish_media().unwrap();
-    assert_eq!(roots[0].sha256, baseline.roots[0].sha256);
+    assert_eq!(roots[0].hash, baseline.roots[0].hash);
     let (bytes, _) = w.finish().unwrap();
     assert!(
         scan(&bytes, Limits::default())
@@ -355,7 +525,7 @@ fn float_bits_and_strided_rows_are_exact_and_do_not_require_gain_maps() {
             duration: None,
             samples: frame_hash(&a, &packed, 32).unwrap(),
         }],
-        storage: Storage::Embedded { sha256: None },
+        storage: Storage::Embedded { hash: None },
     };
     w.segment(&s, &mut &b"opaque IMI fixture"[..], 18).unwrap();
     w.finish_media().unwrap();
@@ -480,7 +650,7 @@ fn json_duplicate_keys_unknown_core_fields_and_pending_payloads_are_refused() {
         assert!(scan(&bytes, Limits::default()).is_err());
     }
     let (mut bytes, index) = file();
-    let s = serde_json::to_string(&score(index.roots[0].sha256, "bad")).unwrap();
+    let s = serde_json::to_string(&score(index.roots[0].hash.clone(), "bad")).unwrap();
     let s = s.replace("\"ppd\":60", "\"ppd\":60,\"ppd\":20");
     bytes.extend(raw(b"scor", s.as_bytes()));
     assert!(
