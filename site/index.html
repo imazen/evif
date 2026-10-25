@@ -8,48 +8,86 @@
 <link rel="icon" href="logo.svg" type="image/svg+xml">
 <style>
   :root {
-    --bg: #0d0716; --panel: #160b26; --ink: #e9e2f5; --muted: #a894c9;
-    --accent: #d9ff7a; --violet: #8d6bd1; --rule: #2d1b47;
+    color-scheme: dark;
+    --bg: #0d0716; --panel: #160d24; --ink: #eee8f8; --muted: #b5a5cd;
+    --accent: #d9ff7a; --violet: #c0a3fa; --rule: #38244e;
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--ink);
-         font: 17px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  main { max-width: 860px; margin: 0 auto; padding: 48px 16px 80px; }
-  header { display: grid; grid-template-columns: 160px 1fr; gap: 28px; align-items: center; }
-  header img { width: 160px; height: auto; filter: drop-shadow(0 0 24px rgba(217,255,122,.25)); }
-  h1 { margin: 0; font-size: 2.2rem; letter-spacing: .02em; }
-  h1 small { display: block; font-size: 1rem; color: var(--muted); font-weight: 400; margin-top: 6px; }
-  h2 { margin: 48px 0 12px; color: var(--accent); font-size: 1.3rem; letter-spacing: .04em; text-transform: uppercase; }
-  p { margin: 0 0 14px; }
-  a { color: var(--violet); }
-  .lead { font-size: 1.2rem; color: var(--ink); }
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; }
-  .card { background: var(--panel); border: 1px solid var(--rule); border-radius: 12px; padding: 18px; }
-  .card h3 { margin: 0 0 8px; color: var(--accent); font-size: 1rem; letter-spacing: .06em; text-transform: uppercase; }
-  .card p { color: var(--muted); margin: 0; font-size: .97rem; }
-  pre { background: var(--panel); border: 1px solid var(--rule); border-radius: 12px; padding: 16px;
-        overflow-x: auto; font: 14px/1.5 ui-monospace, "Cascadia Mono", Menlo, monospace; color: var(--ink); }
+  body { margin: 0; background: radial-gradient(ellipse at 85% 12%, #28113b 0, transparent 48%), var(--bg);
+         color: var(--ink); font: 17px/1.65 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1080px; margin: 0 auto; padding: 24px 32px 64px; }
+  nav { display: flex; justify-content: space-between; align-items: center; gap: 24px; padding-bottom: 24px; }
+  nav .brand { color: var(--ink); font-weight: 800; letter-spacing: .16em; text-decoration: none; display: flex; align-items: center; gap: 10px; }
+  nav img { width: 24px; height: 28px; }
+  nav .links { display: flex; gap: 24px; font-size: .85rem; }
+  .hero { position: relative; isolation: isolate; min-height: 550px; display: flex; align-items: center;
+          overflow: hidden; border: 1px solid var(--rule); border-radius: 20px; background: #0d0716; }
+  .hero-art { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: -2; }
+  .hero::after { content: ""; position: absolute; inset: 0; z-index: -1;
+                 background: linear-gradient(90deg, #0d0716e8, #0d071685 40%, transparent 65%); }
+  .hero-copy { width: 55%; padding: 48px 0 48px 40px; }
+  .eyebrow { color: var(--accent); font: 11px/1.5 ui-monospace, monospace; letter-spacing: .16em; text-transform: uppercase; }
+  h1 { margin: 16px 0 24px; font-size: clamp(3rem, 6vw, 4.6rem); line-height: 1.03; letter-spacing: -.055em; font-weight: 800; }
+  h1 span { display: block; color: var(--violet); font-size: .43em; line-height: 1.25; letter-spacing: -.025em; margin-top: 12px; }
+  .tagline { max-width: 310px; font-size: 1.15rem; line-height: 1.5; }
+  .button { display: inline-flex; margin-top: 18px; padding: 10px 18px; border: 1px solid var(--accent); border-radius: 6px;
+            color: var(--bg); background: var(--accent); font-size: .9rem; font-weight: 700; text-decoration: none; }
+  .button:hover { background: #e9ffb0; color: var(--bg); }
+  h2 { margin: 52px 0 16px; color: var(--accent); font-size: .85rem; letter-spacing: .13em; text-transform: uppercase; }
+  p { margin: 0 0 18px; }
+  a { color: var(--violet); text-underline-offset: 4px; }
+  a:hover { color: var(--accent); }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 5px; }
+  .lead { margin: 32px 0; font-size: 1.12rem; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 28px; }
+  .card { background: linear-gradient(145deg, #211231, var(--panel)); border: 1px solid var(--rule); border-radius: 12px; padding: 24px; }
+  .card svg { width: 32px; height: 32px; stroke: var(--accent); stroke-width: 1.5; fill: none; stroke-linecap: round; stroke-linejoin: round; margin-bottom: 18px; }
+  .card h3 { margin: 0 0 10px; color: var(--ink); font-size: 1.1rem; }
+  .card p { color: var(--muted); margin: 0; font-size: .94rem; }
+  pre { background: #100a1b; border: 1px solid var(--rule); border-left: 3px solid var(--violet); border-radius: 8px; padding: 24px;
+        overflow-x: auto; font: 13px/1.8 ui-monospace, "Cascadia Mono", Menlo, monospace; color: var(--ink); }
   code { font-family: ui-monospace, "Cascadia Mono", Menlo, monospace; }
   .k { color: var(--accent); }
   .m { color: var(--muted); }
-  table { border-collapse: collapse; width: 100%; font-size: .95rem; }
-  td, th { padding: 8px 10px; border-bottom: 1px solid var(--rule); text-align: left; vertical-align: top; }
+  .table-wrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+  td, th { padding: 12px 16px; border-bottom: 1px solid var(--rule); text-align: left; vertical-align: top; }
   th { color: var(--muted); font-weight: 600; }
   td:first-child { font-family: ui-monospace, Menlo, monospace; color: var(--accent); white-space: nowrap; }
-  footer { margin-top: 64px; color: var(--muted); font-size: .9rem; border-top: 1px solid var(--rule); padding-top: 18px; }
-  @media (max-width: 560px) { header { grid-template-columns: 1fr; text-align: center; } header img { margin: 0 auto; } }
+  footer { margin-top: 64px; color: var(--muted); font-size: .85rem; border-top: 1px solid var(--rule); padding-top: 24px; }
+  @media (max-width: 700px) {
+    main { padding: 20px 20px 48px; }
+    .hero { min-height: 650px; align-items: flex-end; }
+    .hero-art { height: 390px; object-position: 75% center; }
+    .hero::after { background: linear-gradient(0deg, #0d0716 0%, #0d0716 36%, transparent 68%); }
+    .hero-copy { width: 100%; padding: 260px 24px 32px; }
+    h1 { font-size: 3.6rem; }
+    .tagline { max-width: 100%; }
+    .grid { grid-template-columns: 1fr; }
+    .card { padding: 24px; }
+    .card svg { float: right; margin-left: 16px; }
+    pre { padding: 18px; }
+    td, th { padding: 10px 8px; }
+  }
 </style>
 </head>
 <body>
 <main>
-  <header>
-    <img src="logo.svg" alt="A ghostly image file with two glowing eyes">
-    <h1>EVIF, the evil image format
-      <small>Find the images your quality metric gets wrong.</small>
-    </h1>
+  <nav aria-label="Main navigation">
+    <a class="brand" href="./"><img src="logo.svg" alt="" width="24" height="28">EVIF</a>
+    <div class="links"><a href="https://github.com/imazen/evif/blob/main/SPEC.md">Format spec</a><a href="https://github.com/imazen/evif">GitHub ↗</a></div>
+  </nav>
+  <header class="hero">
+    <img class="hero-art" src="haunted-file.webp" alt="A violet ghost shaped like an image file, with glowing green eyes and drifting pixel fragments" width="1536" height="1024" fetchpriority="high">
+    <div class="hero-copy">
+      <p class="eyebrow">Perceptual-metric research</p>
+      <h1>EVIF<span>The evil image format.</span></h1>
+      <p class="tagline">Find the images your quality metric gets wrong.</p>
+      <a class="button" href="#get-it">Open the coffin <span aria-hidden="true">&nbsp;↓</span></a>
+    </div>
   </header>
 
-  <p class="lead" style="margin-top:28px">
+  <p class="lead">
     A container and a probe for stress-testing image quality metrics such as SSIMULACRA2,
     butteraugli and zensim. An <code>.evif</code> file holds a distorted image made by pushing a
     real encoder's knobs where no sane encoder goes, the recipe, the lossless pixels our decoder
@@ -66,9 +104,9 @@
   </p>
 
   <div class="grid">
-    <div class="card"><h3>Possess</h3><p>Take a real encoder's full parameter vector: per-band quantization, zero-bias, chroma subsampling, adaptive quantization, deringing, trellis.</p></div>
-    <div class="card"><h3>Judge</h3><p>Score every sample with several metrics, each pinned to a revision, against the family's honest rate-distortion curve at the same bits per pixel.</p></div>
-    <div class="card"><h3>Record</h3><p>Write the bitstream, the pixels, the recipe and every score into one sealed file. <code>evif verify</code> checks the pixels; <code>evif extract</code> hands the bitstream to any decoder.</p></div>
+    <div class="card"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M7 5h12l6 6v17H7zM19 5v7h6M11 17h2m5 0h2M12 22h7"/><path d="m3 11-2 2 2 2m26 4 2 2-2 2"/></svg><h3>Possess</h3><p>Take a real encoder's full parameter vector: per-band quantization, zero-bias, chroma subsampling, adaptive quantization, deringing, trellis.</p></div>
+    <div class="card"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 5v22M10 28h12M5 10h22M8 10l-5 9h10zm16 0-5 9h10z"/><circle cx="16" cy="6" r="2"/></svg><h3>Judge</h3><p>Score every sample with several metrics, each pinned to a revision, against the family's honest rate-distortion curve at the same bits per pixel.</p></div>
+    <div class="card"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M7 4h12l6 6v18H7zM19 4v7h6M11 15h10M11 19h5"/><path d="m16 24 2 2 4-4"/></svg><h3>Record</h3><p>Write the bitstream, the pixels, the recipe and every score into one sealed file. <code>evif verify</code> checks the pixels; <code>evif extract</code> hands the bitstream to any decoder.</p></div>
   </div>
 
   <h2>A file speaks</h2>
@@ -85,7 +123,7 @@
   disagreement: 0.365</pre>
 
   <h2>What is in the coffin</h2>
-  <table>
+  <div class="table-wrap"><table>
     <tr><th>chunk</th><th>holds</th></tr>
     <tr><td>HEAD</td><td>dimensions, channel layout, sample type</td></tr>
     <tr><td>BITS</td><td>the interior bitstream, byte for byte, with its codec tag; interior bpp counts only this</td></tr>
@@ -94,10 +132,10 @@
     <tr><td>clam</td><td>the size a synthetic distortion pretends to cost</td></tr>
     <tr><td>srce knob scor</td><td>source id, the recipe, and every score with metric, variant, version and implementation</td></tr>
     <tr><td>SEAL</td><td>XXH3-64 of the whole file before it</td></tr>
-  </table>
+  </table></div>
   <p style="margin-top:12px">Upper-case first letter: critical. Lower case: ancillary. Byte layout in <a href="https://github.com/imazen/evif/blob/main/SPEC.md">SPEC.md</a>.</p>
 
-  <h2>Get it</h2>
+  <h2 id="get-it">Get it</h2>
 <pre>git clone https://github.com/imazen/evif
 cd evif &amp;&amp; cargo build --release
 target/release/evif probe --family zenjpeg-expert --target ssim2 --out out corpus/*.png</pre>

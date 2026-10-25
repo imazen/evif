@@ -1,6 +1,6 @@
 # EVIF, the evil image format [![CI](https://img.shields.io/github/actions/workflow/status/imazen/evif/ci.yml?style=flat-square&label=CI)](https://github.com/imazen/evif/actions/workflows/ci.yml) [![crates.io](https://img.shields.io/crates/v/evif?style=flat-square)](https://crates.io/crates/evif) [![lib.rs](https://img.shields.io/crates/v/evif?style=flat-square&label=lib.rs&color=blue)](https://lib.rs/crates/evif) [![docs.rs](https://img.shields.io/docsrs/evif?style=flat-square)](https://docs.rs/evif) [![license](https://img.shields.io/crates/l/evif?style=flat-square)](#license)
 
-<p align="center"><img src="logo.svg" width="220" alt="A ghostly image file with two glowing eyes"></p>
+<p align="center"><img src="site/evif-banner.webp" width="960" alt="EVIF — the evil image format. A violet ghost-file with glowing green eyes floats over scattered pixels."></p>
 
 **Find the images your quality metric gets wrong.**
 
