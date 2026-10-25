@@ -528,11 +528,12 @@ fn extract(registry: &Registry, args: &[String]) -> Res<()> {
     }
     if let Some(s) = &f.scores {
         let p = dir.join(format!("{stem}.scores.json"));
-        fs::write(
+        write_new(
             &p,
-            serde_json::to_string_pretty(s).map_err(|e| e.to_string())?,
-        )
-        .map_err(|e| format!("{}: {e}", p.display()))?;
+            serde_json::to_string_pretty(s)
+                .map_err(|e| e.to_string())?
+                .as_bytes(),
+        )?;
         println!("{}", p.display());
     }
     Ok(())
@@ -626,7 +627,7 @@ fn repack(registry: &Registry, args: &[String]) -> Res<()> {
 
 /// Encode each image with explicit parameter vectors (one JSON object per
 /// line of `--params`) or the family's baseline at `--qualities`, and write
-/// the decoded renditions as PNG with a TSV of their sizes. The baseline
+/// the requested renditions, native bytes or EVIF containers with a TSV of costs. The baseline
 /// form gives the honest rate-distortion anchor any external scorer can use.
 fn render(registry: &Registry, args: &[String]) -> Res<()> {
     let (mut family, mut out, mut qualities, mut params_file) = (None, None, None, None);

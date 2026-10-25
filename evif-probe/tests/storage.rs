@@ -172,3 +172,51 @@ fn private_codec_and_contradictory_requests_fail_before_output() {
         assert!(!out.exists());
     }
 }
+
+#[test]
+fn extract_preserves_existing_score_files() {
+    let reg = Registry::builtin();
+    let root = root("scores");
+    let image = image();
+    let mut file = Evif::new(image.header(), image.to_png().unwrap(), image.digest());
+    file.scores = Some(evif::Scores::new(vec![]));
+    let input = root.join("input.evif");
+    fs::write(&input, file.to_bytes().unwrap()).unwrap();
+    let output = root.join("extracted");
+    fs::create_dir(&output).unwrap();
+    let scores = output.join("input.scores.json");
+    fs::write(&scores, b"existing measurements").unwrap();
+    assert!(
+        run(
+            &reg,
+            &["extract", input.to_str().unwrap(), output.to_str().unwrap()]
+        )
+        .is_err()
+    );
+    assert_eq!(fs::read(scores).unwrap(), b"existing measurements");
+}
+
+#[test]
+fn render_preserves_legacy_ledgers_without_appending_mixed_columns() {
+    let reg = Registry::builtin();
+    let root = root("legacy-ledger");
+    let ledger = root.join("render.tsv");
+    let before = b"image\ttag\tbytes\tbpp\tpng\tparams\n";
+    fs::write(&ledger, before).unwrap();
+    let err = run(
+        &reg,
+        &[
+            "render",
+            "--family",
+            "zenjpeg-expert",
+            "--out",
+            root.to_str().unwrap(),
+            "--qualities",
+            "60",
+            "missing.png",
+        ],
+    )
+    .unwrap_err();
+    assert!(err.contains("different schema"), "{err}");
+    assert_eq!(fs::read(ledger).unwrap(), before);
+}
