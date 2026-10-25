@@ -475,7 +475,14 @@ fn extract(args: &[String]) -> Res<()> {
         .unwrap_or_else(|| "file".into());
     if let Some(b) = &f.bits {
         let ext = String::from_utf8_lossy(&b.codec).trim().to_string();
-        let p = dir.join(format!("{stem}.{ext}"));
+        let bit_dir = if ext.eq_ignore_ascii_case("png") {
+            let bit_dir = dir.join("bitstreams");
+            fs::create_dir_all(&bit_dir).map_err(|e| format!("{}: {e}", bit_dir.display()))?;
+            bit_dir
+        } else {
+            dir.to_path_buf()
+        };
+        let p = bit_dir.join(format!("{stem}.{ext}"));
         fs::write(&p, &b.data).map_err(|e| format!("{}: {e}", p.display()))?;
         println!("{}", p.display());
     }
