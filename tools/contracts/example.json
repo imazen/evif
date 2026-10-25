@@ -1,0 +1,181 @@
+{
+  "schema": "evif-evaluation-draft-1",
+  "inputs": {
+    "reference": {
+      "kind": "sequence",
+      "sample": "u16",
+      "size": [
+        13,
+        9
+      ],
+      "alpha": "straight",
+      "color": {
+        "authority": "cicp",
+        "primaries": "bt2020",
+        "transfer": "pq",
+        "matrix": "identity",
+        "range": "full"
+      },
+      "frames": [
+        {
+          "pts": [
+            0,
+            1
+          ],
+          "duration": [
+            1,
+            24
+          ],
+          "samples_sha256": "96294ab73b8d91bf9e1b7ca4c4a471f9587f081545bd8919cd47505f5780c72d"
+        },
+        {
+          "pts": [
+            1,
+            24
+          ],
+          "duration": [
+            1,
+            24
+          ],
+          "samples_sha256": "310139afa14154362b1aaee288b1882ab18d90958ec45aae10eeb4c89b23e06a"
+        },
+        {
+          "pts": [
+            1,
+            12
+          ],
+          "duration": [
+            1,
+            24
+          ],
+          "samples_sha256": "2c998ce4b7a60849638c8b47e11335bf1afd69fea83c2905b7bb1f1723edaa5d"
+        }
+      ]
+    },
+    "candidate": {
+      "kind": "sequence",
+      "sample": "u16",
+      "size": [
+        13,
+        9
+      ],
+      "alpha": "straight",
+      "color": {
+        "authority": "cicp",
+        "primaries": "bt2020",
+        "transfer": "pq",
+        "matrix": "identity",
+        "range": "full"
+      },
+      "frames": [
+        {
+          "pts": [
+            0,
+            1
+          ],
+          "duration": [
+            1,
+            24
+          ],
+          "samples_sha256": "96294ab73b8d91bf9e1b7ca4c4a471f9587f081545bd8919cd47505f5780c72d"
+        },
+        {
+          "pts": [
+            1,
+            24
+          ],
+          "duration": [
+            1,
+            24
+          ],
+          "samples_sha256": "310139afa14154362b1aaee288b1882ab18d90958ec45aae10eeb4c89b23e06a"
+        },
+        {
+          "pts": [
+            1,
+            12
+          ],
+          "duration": [
+            1,
+            24
+          ],
+          "samples_sha256": "2c998ce4b7a60849638c8b47e11335bf1afd69fea83c2905b7bb1f1723edaa5d"
+        }
+      ]
+    }
+  },
+  "view": {
+    "status": "specified",
+    "display": {
+      "peak_nits": "1000",
+      "black_nits": "0.01"
+    },
+    "geometry": {
+      "ppd": "60"
+    },
+    "ambient": {
+      "illuminance_lux": "5"
+    }
+  },
+  "metric": {
+    "family": "cvvdp",
+    "implementation": "illustrative-adapter-not-a-measured-run",
+    "model_sha256": "example-no-model-file",
+    "reference_mode": "full-reference",
+    "temporal": "pooled",
+    "one_frame_policy": "still",
+    "config": {
+      "ppd": "60",
+      "peak_nits": "1000",
+      "temp_filter": "default"
+    },
+    "view_binding": {
+      "mode": "native",
+      "parameters": {
+        "ppd": "/geometry/ppd",
+        "peak_nits": "/display/peak_nits"
+      },
+      "assumptions": {}
+    }
+  },
+  "pipeline": {
+    "reference": [
+      {
+        "op": "declared-input-conversion",
+        "implementation": "example-v1",
+        "config": {}
+      }
+    ],
+    "candidate": [
+      {
+        "op": "declared-input-conversion",
+        "implementation": "example-v1",
+        "config": {}
+      }
+    ],
+    "alignment": "exact",
+    "delivery": {
+      "mode": "native",
+      "rate": [
+        24,
+        1
+      ]
+    },
+    "boundary": "replicate",
+    "context_frames": {
+      "before": 0,
+      "after": 0
+    }
+  },
+  "output": {
+    "key": "jod",
+    "kind": "quality",
+    "direction": "higher",
+    "units": "jod",
+    "scope": "clip",
+    "pooling": {
+      "owner": "metric",
+      "method": "native"
+    }
+  }
+}

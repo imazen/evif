@@ -48,3 +48,7 @@ sequence-carriers:
 
 sequence-oracle artifacts:
     {{heavy}} python3 tools/contracts/verify_apng.py {{artifacts}}
+
+# Executable design checks; no codec or metric inference is performed.
+contract-check:
+    PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/contracts -p test_model.py -v
