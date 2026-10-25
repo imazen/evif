@@ -9,6 +9,11 @@ The [CVVDP/HDR-VDP source audit](vdp-input-audit.md) identifies concrete adapter
 gaps and the additional photometry, spectral-emission, observer and task bindings
 required before this proposal can claim sufficient inputs for those metrics.
 
+The [resolved-rendition profile](resolved-renditions.md) specifies the initial
+SDR/HDR video storage boundary: one complete signal per rendition, with no
+mandatory gain map or duplicate SDR/HDR copy. It includes executable descriptor
+and segment-plan checks, separate from metric configuration.
+
 The unit of evidence is **an evaluation of identified media under a recorded
 presentation and metric contract**. A codec file, a decoded raster, a display
 simulation, and a score are different objects. Keeping their identities separate

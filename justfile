@@ -51,4 +51,4 @@ sequence-oracle artifacts:
 
 # Executable design checks; no codec or metric inference is performed.
 contract-check:
-    PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/contracts -p test_model.py -v
+    PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/contracts -p 'test_*.py' -v
