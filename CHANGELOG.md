@@ -9,7 +9,7 @@ All notable changes to this repository. Format: [Keep a Changelog](https://keepa
 - The unreleased major-1 draft uses canonical XXH3-64 sample hashes with optional
   SHA-256 checks. `Frame.samples` and `frame_hash` use `SampleHashes`; media roots
   use domain revision 2 and exclude optional checks. Earlier draft media must be
-  regenerated from decoded samples.
+  regenerated from decoded samples (`3b1746ed`).
 - Opt-in wire major 1 has new framing and media semantics; major-0 readers refuse
   it. The legacy Rust API and probe commands retain their format (`f12f8cca`).
 - The format is draft v0: chunk layouts may change until the first tagged release.
