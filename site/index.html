@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>EVIF, the evil image format</title>
-<meta name="description" content="A self-reporting container and probe for stress-testing image quality metrics.">
+<meta name="description" content="Find quality metrics’ weak spots. EVIF packages exact SDR/HDR image and video samples, reproduction details, and appendable evaluations.">
 <link rel="icon" href="logo.svg" type="image/svg+xml">
 <style>
   :root {
@@ -39,6 +39,15 @@
   a:hover { color: var(--accent); }
   a:focus-visible { outline: 2px solid var(--accent); outline-offset: 5px; }
   .lead { margin: 32px 0; font-size: 1.12rem; }
+  .status { padding: 18px 22px; border: 1px solid var(--rule); border-radius: 10px; color: var(--muted); }
+  .status strong { color: var(--accent); }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .pair h3 { margin-top: 0; color: var(--violet); }
+  .pair p:last-child { margin-bottom: 0; }
+  .wire { display: flex; flex-wrap: wrap; gap: 8px; margin: 20px 0; padding: 0; list-style: none; }
+  .wire li { padding: 8px 12px; border: 1px solid var(--rule); border-radius: 6px; font: 14px/1.6 ui-monospace, monospace; }
+  .wire .seal { border-color: var(--violet); }
+  .wire .score { color: var(--accent); border-style: dashed; }
   .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 28px; }
   .card { background: linear-gradient(145deg, #211231, var(--panel)); border: 1px solid var(--rule); border-radius: 12px; padding: 24px; }
   .card svg { width: 32px; height: 32px; stroke: var(--accent); stroke-width: 1.5; fill: none; stroke-linecap: round; stroke-linejoin: round; margin-bottom: 18px; }
@@ -63,7 +72,7 @@
     .hero-copy { width: 100%; padding: 260px 24px 32px; }
     h1 { font-size: 3.6rem; }
     .tagline { max-width: 100%; }
-    .grid { grid-template-columns: 1fr; }
+    .grid, .pair { grid-template-columns: 1fr; }
     .card { padding: 24px; }
     .card svg { float: right; margin-left: 16px; }
     pre { padding: 18px; }
@@ -88,28 +97,32 @@
   </header>
 
   <p class="lead">
-    A container and a probe for stress-testing image quality metrics such as SSIMULACRA2,
-    butteraugli and zensim. An <code>.evif</code> file holds a distorted image made by pushing a
-    real encoder's knobs where no sane encoder goes, the recipe, the lossless pixels our decoder
-    produced, and the score every metric gave it. Anyone can re-run the metrics and check the recorded scores.
+    Find weak spots in quality metrics, including ones you have never tested before.
+    The probe searches encoder settings and distortions for disagreements between metrics.
+    The container keeps exact reference and candidate samples, their interpretation and timing,
+    and evaluations you can reproduce or extend. Images and video. SDR and HDR.
   </p>
+  <p class="status"><strong>Wire major 1 · implemented draft.</strong> Media transport and appendable
+    evaluations are available now. The existing probe still uses the major-0 RGB8 image path.
+    Video metric adapters and display-accurate HDR playback are not implemented.</p>
 
   <h2>Why</h2>
   <p>
     Fixed datasets such as KADID-10k and TID2013 show whether a metric ranks everyday distortions
     the way people do. They cannot show what an optimizer finds when it pushes against the metric,
     and that is how metrics are used: inside encoder tuning, rate-distortion search and codec pickers.
-    EVIF runs a maximum-differentiation search (after Wang &amp; Simoncelli, 2008) over codec parameters
-    rather than pixels, so every finding is a bitstream a real decoder reads and a file size that is real.
+    EVIF searches for metric disagreement across encoder settings and synthetic distortions.
+    Codec experiments retain measured encoded cost; synthetic experiments record their assumed cost
+    separately. Frozen lossless samples let another metric examine the same finding later.
   </p>
 
   <div class="grid">
     <div class="card"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M7 5h12l6 6v17H7zM19 5v7h6M11 17h2m5 0h2M12 22h7"/><path d="m3 11-2 2 2 2m26 4 2 2-2 2"/></svg><h3>Possess</h3><p>Take a real encoder's full parameter vector: per-band quantization, zero-bias, chroma subsampling, adaptive quantization, deringing, trellis.</p></div>
     <div class="card"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 5v22M10 28h12M5 10h22M8 10l-5 9h10zm16 0-5 9h10z"/><circle cx="16" cy="6" r="2"/></svg><h3>Judge</h3><p>Score every sample with several metrics, each pinned to a revision, against the family's honest rate-distortion curve at the same bits per pixel.</p></div>
-    <div class="card"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M7 4h12l6 6v18H7zM19 4v7h6M11 15h10M11 19h5"/><path d="m16 24 2 2 4-4"/></svg><h3>Record</h3><p>Store one lossless reference decode, the recipe and every score. Keep candidate bytes or omit them with their size and checksum recorded. <code>evif verify</code> checks the reference pixels; <code>evif extract</code> exports retained candidate bytes.</p></div>
+    <div class="card"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M7 4h12l6 6v18H7zM19 4v7h6M11 15h10M11 19h5"/><path d="m16 24 2 2 4-4"/></svg><h3>Record</h3><p>Freeze the samples and retain the recipe. Major 1 gives reference and candidate the same payload semantics, with optional original codec bytes. Append new evaluations as metrics evolve.</p></div>
   </div>
 
-  <h2>A file speaks</h2>
+  <h2>A probe finding <span class="m">· legacy major 0</span></h2>
 <pre><span class="m">$ evif inspect out/ssim2/baby/zenjpeg-expert-002.evif</span>
   576x576 Rgb U8
   bitstream: jpeg 11078 bytes
@@ -122,24 +135,62 @@
   <span class="k">butteraugli/3-norm</span>         3.7792  (Lower, butteraugli@02b570b4)
   disagreement: 0.365</pre>
 
-  <h2>What is in the coffin</h2>
+  <h2>Two assets. The same rules.</h2>
+  <div class="pair">
+    <div class="card"><h3>Reference</h3><p>Signal description + exact frame timing + lossless samples.</p><p>Optional original encode.</p></div>
+    <div class="card"><h3>Candidate</h3><p>Signal description + exact frame timing + lossless samples.</p><p>Optional original encode.</p></div>
+  </div>
+  <p style="margin-top:20px">An evaluation assigns the roles. Each asset needs only one resolved SDR
+    or HDR rendition. Gain maps and duplicate SDR/HDR copies are not required. PNG stores integer
+    stills, APNG stores integer sequences, and lossless IMI carries integer or float frames.</p>
+  <p>Color primaries, transfer function, signal units, pixel aspect, frame durations and looping
+    belong to the media. Viewing conditions, metric versions, preparation steps and results belong
+    to adapter-owned evaluation JSON. PQ, HLG and relative or absolute linear light have explicit
+    meanings; an HDR label alone is not enough.</p>
+
+  <h2>Inside a major-1 coffin</h2>
+  <ol class="wire" aria-label="Record order">
+    <li>16-byte header</li><li>ASST</li><li>SEGM + PNGF / IMIJ</li><li>BITS?</li>
+    <li class="seal">MEND</li><li class="score">scor</li><li class="score">scor …</li>
+  </ol>
+  <p>Flat records: a four-letter tag, a little-endian 64-bit body length, then the body.
+    Assets and segments can interleave. <code>MEND</code> closes the media;
+    scores can follow without rewriting it.</p>
   <div class="table-wrap"><table>
-    <tr><th>chunk</th><th>holds</th></tr>
-    <tr><td>HEAD</td><td>dimensions, channel layout, sample type</td></tr>
-    <tr><td>BITS</td><td>optional candidate bytes, including external codecs or EVIF-specific compression</td></tr>
-    <tr><td>BINF</td><td>recorded candidate codec, encoded size and checksum when bytes are omitted</td></tr>
-    <tr><td>PNGF / IMIJ</td><td>one lossless reference decode: the exact pixels the metrics scored</td></tr>
-    <tr><td>DIGS</td><td>XXH3-64 digests of the distorted and reference rasters</td></tr>
-    <tr><td>clam</td><td>the size a synthetic distortion pretends to cost</td></tr>
-    <tr><td>srce knob scor</td><td>source id, the recipe, and every score with metric, variant, version and implementation</td></tr>
-    <tr><td>SEAL</td><td>XXH3-64 of the whole file before it</td></tr>
+    <tr><th scope="col">Record</th><th scope="col">Holds</th></tr>
+    <tr><td>ASST</td><td>Asset identity, geometry, sample type, color interpretation and looping</td></tr>
+    <tr><td>SEGM</td><td>Ordered frame range, exact rational durations, sample hashes and carrier location</td></tr>
+    <tr><td>PNGF / IMIJ</td><td>Lossless rendition segment, with the same semantics for either asset</td></tr>
+    <tr><td>BITS</td><td>Optional original encode for either asset; external codecs or EVIF-specific compression</td></tr>
+    <tr><td>MEND</td><td>SHA-256 media identities binding samples, interpretation, timing and looping</td></tr>
+    <tr><td>scor</td><td>Appendable evaluation envelope and adapter-owned JSON; corrections explicitly supersede earlier scores</td></tr>
   </table></div>
-  <p style="margin-top:12px">Upper-case first letter: critical. Lower case: ancillary. Byte layout in <a href="https://github.com/imazen/evif/blob/main/SPEC.md">SPEC.md</a>.</p>
+  <p style="margin-top:16px">Media identity survives lossless repacking. Embedded payload hashes are
+    optional; external payloads require SHA-256 and are never fetched automatically. Scores and notes
+    have no mandatory checksum, and there is no whole-file seal.</p>
+  <p>Unknown uppercase-first records are critical and must be refused. Lowercase ancillary records
+    can pass through unchanged. Streaming readers index bounded metadata and payload locations.
+    See the <a href="https://github.com/imazen/evif/blob/main/SPEC.md">wire specification</a> for
+    profiles, limits and extension rules.</p>
 
   <h2 id="get-it">Get it</h2>
 <pre>git clone https://github.com/imazen/evif
 cd evif &amp;&amp; cargo build --release
-target/release/evif probe --family zenjpeg-expert --target ssim2 --out out corpus/*.png</pre>
+<span class="m"># Search still-image metrics (major 0)</span>
+target/release/evif probe --family zenjpeg-expert --target ssim2 --out out corpus/*.png
+
+<span class="m"># Package prepared lossless media (major 1)</span>
+target/release/evif wire pack plan.json output.evif
+target/release/evif wire inspect output.evif
+target/release/evif wire append output.evif score.json</pre>
+  <p><code>pack</code> takes an explicit asset/segment plan and already encoded lossless carriers.
+    <code>inspect</code> checks the container and declared embedded payload hashes; it does not decode
+    carriers or certify sample hashes. <code>append</code> preserves the evaluation JSON bytes.</p>
+  <p>Start with the <a href="https://github.com/imazen/evif/blob/main/docs/wire-tools.md">wire tools guide</a>.
+    For metric integration, read the <a href="https://github.com/imazen/evif/blob/main/docs/vdp-input-audit.md">CVVDP / HDR-VDP input audit</a>.
+    Real PQ/HLG APNG fixtures have been independently checked with FFmpeg;
+    <a href="https://github.com/imazen/evif/blob/main/benchmarks/wire-v1-2026-10-25.pointer.md">verification evidence and limits</a>
+    are recorded separately.</p>
 
   <footer>
     The <code>evif</code> container crate is MIT OR Apache-2.0. The probe is AGPL-3.0 or commercial.
