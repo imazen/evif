@@ -90,6 +90,8 @@ target/release/evif render --family zenjpeg-expert --out out/honest \
 
 `extract` writes the interior `.jpeg` (any decoder can open it), the `.png` rendition
 the metrics scored, and the scores as JSON.
+For an interior PNG, the original encoded bytes go under `bitstreams/` so they
+remain distinct from the `.png` rendition in the output directory.
 
 ## What is in the coffin
 
