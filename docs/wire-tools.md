@@ -52,7 +52,12 @@ std. Unknown ancillary records and original scoring JSON remain addressable by
 their spans for lossless pass-through. External references remain unresolved.
 
 `frame_hash` accepts strided, little-endian raw rows and preserves float bits.
-It performs no color conversion. `append_record` preserves scoring JSON spelling;
+It returns canonical XXH3-64 and optional SHA-256 checks in `SampleHashes`, computing
+both by default in one traversal. `frame_hash_xxh3` computes only XXH3; omitting
+SHA-256 does not change media identity. Both hash the same descriptor and samples,
+excluding row padding, without color conversion. Media roots use the canonical
+XXH3 digests and are not cryptographic commitments to the raw pixels.
+`append_record` preserves scoring JSON spelling;
 `append_score` serializes a typed envelope. Both require exclusive application
 control of the file during validation and append.
 
@@ -65,8 +70,10 @@ larger than 4 GiB. This is not a memory benchmark.
 `just sequence-carriers` creates real PQ/HLG APNG fixtures and major-1 files with
 two symmetric assets. It prints the artifact directory and also writes pack plans
 and score JSON. Run `just wire-oracle <that-directory>` to independently parse the
-wire, recompute media hashes, inspect PNG timing/CICP/CRCs, and use FFmpeg to check
-every decoded sample digest. The oracle retains extracted payloads beside the
+wire, recompute media hashes, inspect PNG timing/CICP/CRCs, and use FFmpeg plus the
+system xxHash shared library to check every decoded sample digest with both
+algorithms when present. Both tools are required for this check; missing tools
+are errors. The oracle retains extracted payloads beside the
 fixtures. It is deliberately limited to small RGBA16 PQ/HLG APNG fixtures and
 refuses other profiles when decoding is requested.
 

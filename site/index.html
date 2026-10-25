@@ -162,10 +162,13 @@
     <tr><td>SEGM</td><td>Ordered frame range, exact rational durations, sample hashes and carrier location</td></tr>
     <tr><td>PNGF / IMIJ</td><td>Lossless rendition segment, with the same semantics for either asset</td></tr>
     <tr><td>BITS</td><td>Optional original encode for either asset; external codecs or EVIF-specific compression</td></tr>
-    <tr><td>MEND</td><td>SHA-256 media identities binding samples, interpretation, timing and looping</td></tr>
+    <tr><td>MEND</td><td>SHA-256 media identities binding canonical XXH3 sample digests, interpretation, timing and looping</td></tr>
     <tr><td>scor</td><td>Appendable evaluation envelope and adapter-owned JSON; corrections explicitly supersede earlier scores</td></tr>
   </table></div>
-  <p style="margin-top:16px">Media identity survives lossless repacking. Embedded payload hashes are
+  <p style="margin-top:16px">XXH3-64 is canonical for decoded samples. An optional SHA-256 check covers
+    the same bytes; writers emit both by default. Adding or removing that extra check leaves media
+    identity unchanged. The media root is not a cryptographic commitment to raw samples.</p>
+  <p>Media identity survives lossless repacking. Embedded payload hashes are
     optional; external payloads require SHA-256 and are never fetched automatically. Scores and notes
     have no mandatory checksum, and there is no whole-file seal.</p>
   <p>Unknown uppercase-first records are critical and must be refused. Lowercase ancillary records

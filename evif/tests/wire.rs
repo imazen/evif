@@ -34,6 +34,100 @@ fn frames(a: &Asset) -> Vec<Frame> {
         })
         .collect()
 }
+
+#[test]
+fn sample_hashes_match_independent_algorithms_and_exclude_padding() {
+    use sha2::{Digest, Sha256};
+    // Cover short and long XXH3 input paths, multiple sample types, and padding.
+    for width in [1, 2, 7, 32, 257] {
+        for samples in [Samples::U8, Samples::U16, Samples::F16, Samples::F32] {
+            let mut a = asset(1, Kind::Still);
+            a.width = width;
+            a.samples = samples;
+            let row = width as usize * 4 * samples.bytes();
+            let stride = row + 13;
+            let mut padded = vec![0xa5; stride * 2];
+            let mut canonical = b"EVIF/frame/1\0".to_vec();
+            canonical.extend_from_slice(&width.to_le_bytes());
+            canonical.extend_from_slice(&2u32.to_le_bytes());
+            canonical.extend_from_slice(&[4, samples as u8]);
+            for y in 0..2 {
+                for x in 0..row {
+                    padded[y * stride + x] = (x.wrapping_mul(37) + y * 19) as u8;
+                }
+                canonical.extend_from_slice(&padded[y * stride..y * stride + row]);
+            }
+            let both = frame_hash(&a, &padded, stride).unwrap();
+            let fast = frame_hash_xxh3(&a, &padded, stride).unwrap();
+            assert_eq!(both.xxh3_64.0, xxhash_rust::xxh3::xxh3_64(&canonical));
+            assert_eq!(both.sha256, Some(Hash(Sha256::digest(&canonical).into())));
+            assert_eq!(fast.xxh3_64, both.xxh3_64);
+            assert_eq!(fast.sha256, None);
+            padded[row] ^= 1; // padding is not a sample
+            assert_eq!(frame_hash(&a, &padded, stride).unwrap(), both);
+            padded[0] ^= 1;
+            let changed = frame_hash(&a, &padded, stride).unwrap();
+            assert_ne!(changed.xxh3_64, both.xxh3_64);
+            assert_ne!(changed.sha256, both.sha256);
+        }
+    }
+}
+
+#[test]
+fn optional_sample_sha_does_not_change_identity_but_canonical_xxh3_does() {
+    let a = asset(1, Kind::Sequence);
+    let make = |mode| {
+        let mut s = segment(&a, b"x");
+        for f in &mut s.frames {
+            match mode {
+                1 => f.samples.sha256 = None,
+                2 => f.samples.sha256 = Some(Hash::of(b"different check")),
+                3 => f.samples.xxh3_64.0 ^= 1,
+                _ => (),
+            }
+        }
+        let mut writer = Writer::new(Vec::new(), Limits::default()).unwrap();
+        writer.asset(&a).unwrap();
+        writer.segment(&s, &mut &b"x"[..], 1).unwrap();
+        writer.finish_media().unwrap();
+        let (bytes, index) = writer.finish().unwrap();
+        assert_eq!(scan(&bytes, Limits::default()).unwrap().roots, index.roots);
+        index.roots
+    };
+    // A container cannot verify decoded-sample checks; these are root semantics.
+    assert_eq!(make(0), make(1));
+    assert_eq!(make(0), make(2));
+    assert_ne!(make(0), make(3));
+}
+
+#[test]
+fn sample_hash_json_requires_canonical_xxh3_even_with_sha256() {
+    let fast = SampleHashes {
+        xxh3_64: SampleHash(0x0123456789abcdef),
+        sha256: None,
+    };
+    let encoded = serde_json::to_string(&fast).unwrap();
+    assert_eq!(encoded, r#"{"xxh3-64":"0123456789abcdef"}"#);
+    assert_eq!(
+        serde_json::from_str::<SampleHashes>(&encoded).unwrap(),
+        fast
+    );
+    for invalid in [
+        r#"{}"#,
+        r#"{"sha256":null}"#,
+        r#"{"xxh3-64":123}"#,
+        r#"{"xxh3-64":"0123456789ABCDEF"}"#,
+        r#"{"xxh3-64":"1234"}"#,
+        r#"{"xxh3-64":"0123456789abcdef","sha256":"bad"}"#,
+        r#"{"xxh3-64":"0123456789abcdef","other":1}"#,
+        r#""0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef""#,
+    ] {
+        assert!(
+            serde_json::from_str::<SampleHashes>(invalid).is_err(),
+            "{invalid}"
+        );
+    }
+}
 fn segment(a: &Asset, bytes: &[u8]) -> Segment {
     Segment {
         asset: a.id,

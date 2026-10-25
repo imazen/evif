@@ -17,6 +17,9 @@ JSON. `evif::wire` reads/writes it without buffering whole payloads. The probe
 commands below still use the [legacy still format](docs/legacy-wire-0.md);
 the new container does not itself run video metrics or render an HDR display.
 Use [`evif wire pack`, `inspect`, and `append`](docs/wire-tools.md) for major-1 files.
+Decoded samples use canonical XXH3-64 with an optional SHA-256 check; adding that
+check does not change media identity. The writer's frame-hashing helper emits both
+by default, with an XXH3-only path available.
 
 It is built for perceptual-metric research: finding the encodes a metric gets wrong,
 so the metric can be fixed before an encoder is tuned against it.

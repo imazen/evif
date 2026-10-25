@@ -1,9 +1,12 @@
 """Independent small-fixture reader for SPEC.md; optional FFmpeg APNG read-back.
 
 This is test tooling, not a production parser or an encoder. No Rust code is used
-for framing, roots, SHA-256, or the optional decoded-sample check.
+for framing, roots, SHA-256, or the optional decoded-sample check. Decoded-sample
+verification requires the system xxHash shared library and FFmpeg.
 """
 import argparse
+import ctypes
+import ctypes.util
 from fractions import Fraction
 import hashlib
 import json
@@ -48,7 +51,7 @@ def code(value, names):
 
 def initial_hash(a):
     assert a["profile"] == "resolved-rgb/1"
-    h = hashlib.sha256(b"EVIF/media/1\0")
+    h = hashlib.sha256(b"EVIF/media/2\0")
     h.update(bytes([1, code(a["kind"], "still sequence")]))
     h.update(struct.pack("<II", a["width"], a["height"]))
     h.update(bytes([
@@ -67,6 +70,16 @@ def initial_hash(a):
     if a.get("plays") is not None:
         h.update(struct.pack("<Q", u64(a["plays"])))
     return h
+
+
+def xxh3(data):
+    library = ctypes.util.find_library("xxhash")
+    if library is None:
+        raise RuntimeError("decoded-sample verification requires the xxHash shared library")
+    function = ctypes.CDLL(library).XXH3_64bits
+    function.argtypes = (ctypes.c_void_p, ctypes.c_size_t)
+    function.restype = ctypes.c_uint64
+    return f"{function(data, len(data)):016x}"
 
 
 def check_apng(a, segment, body, path):
@@ -115,7 +128,10 @@ def check_apng(a, segment, body, path):
     assert len(decoded) == size * len(timing)
     prefix = b"EVIF/frame/1\0" + struct.pack("<IIBB", a["width"], a["height"], 4, 2)
     for i, frame in enumerate(segment["frames"]):
-        assert hashlib.sha256(prefix + decoded[i*size:(i+1)*size]).hexdigest() == frame["samples"]
+        canonical = prefix + decoded[i*size:(i+1)*size]
+        assert xxh3(canonical) == frame["samples"]["xxh3-64"]
+        if frame["samples"].get("sha256") is not None:
+            assert hashlib.sha256(canonical).hexdigest() == frame["samples"]["sha256"]
 
 
 def inspect(path, decode_apng=False):
@@ -155,7 +171,9 @@ def inspect(path, decode_apng=False):
                     hashes[key].update(bytes([duration is not None]))
                     if duration is not None:
                         hashes[key].update(ratio(duration))
-                    hashes[key].update(bytes.fromhex(frame["samples"]))
+                    sample_hash = frame["samples"]["xxh3-64"]
+                    assert len(sample_hash) == 16 and all(c in "0123456789abcdef" for c in sample_hash)
+                    hashes[key].update(struct.pack("<Q", int(sample_hash, 16)))
                     counts[key] += 1
                 if value["storage"]["kind"] == "embedded":
                     pending = value

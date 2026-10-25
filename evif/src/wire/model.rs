@@ -2,6 +2,7 @@ use alloc::{string::String, vec::Vec};
 use core::{fmt, str::FromStr};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use sha2::{Digest, Sha256};
+use zenhash::Xxh3;
 
 use super::{Error, check};
 
@@ -71,6 +72,53 @@ impl<'de> Deserialize<'de> for Hash {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         String::deserialize(d)?.parse().map_err(de::Error::custom)
     }
+}
+
+/// Canonical XXH3-64 sample digest, serialized as 16 lowercase hex digits.
+/// Uses the default (zero) seed and standard XXH3 secret.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct SampleHash(pub u64);
+impl fmt::Display for SampleHash {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:016x}", self.0)
+    }
+}
+impl FromStr for SampleHash {
+    type Err = Error;
+    fn from_str(text: &str) -> Result<Self, Error> {
+        check(
+            text.len() == 16
+                && text
+                    .bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)),
+            "invalid XXH3-64",
+        )?;
+        u64::from_str_radix(text, 16)
+            .map(Self)
+            .map_err(|_| Error::Invalid("invalid XXH3-64"))
+    }
+}
+impl Serialize for SampleHash {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.collect_str(self)
+    }
+}
+impl<'de> Deserialize<'de> for SampleHash {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        String::deserialize(d)?.parse().map_err(de::Error::custom)
+    }
+}
+
+/// Required canonical sample identity plus an optional independent check.
+/// Both algorithms consume the same frame descriptor and packed sample bytes.
+/// SHA-256 presence or value does not contribute to media identity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SampleHashes {
+    #[serde(rename = "xxh3-64")]
+    pub xxh3_64: SampleHash,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sha256: Option<Hash>,
 }
 
 /// Positive reduced rational; units are defined by the containing field.
@@ -201,7 +249,7 @@ impl Asset {
     }
     pub(crate) fn hasher(&self) -> Sha256 {
         let mut h = Sha256::new();
-        h.update(b"EVIF/media/1\0");
+        h.update(b"EVIF/media/2\0");
         h.update([1, self.kind as u8]); // resolved-rgb profile revision
         h.update(self.width.to_le_bytes());
         h.update(self.height.to_le_bytes());
@@ -228,8 +276,32 @@ impl Asset {
 
 /// Hash a decoded frame, skipping row padding. Multibyte samples must already
 /// be little-endian, including raw IEEE float bits. No color conversion or
-/// nonfinite-value repair is performed. Descriptor validation is separate.
-pub fn frame_hash(asset: &Asset, samples_le: &[u8], stride_bytes: usize) -> Result<Hash, Error> {
+/// nonfinite-value repair is performed. Returns canonical XXH3-64 and additional
+/// SHA-256, computed in one traversal. See [`frame_hash_xxh3`] for XXH3 alone.
+pub fn frame_hash(
+    asset: &Asset,
+    samples_le: &[u8],
+    stride_bytes: usize,
+) -> Result<SampleHashes, Error> {
+    hash_frame(asset, samples_le, stride_bytes, true)
+}
+
+/// Hash the same canonical frame bytes with XXH3-64 only, without computing
+/// SHA-256. The result has the same canonical identity as [`frame_hash`].
+pub fn frame_hash_xxh3(
+    asset: &Asset,
+    samples_le: &[u8],
+    stride_bytes: usize,
+) -> Result<SampleHashes, Error> {
+    hash_frame(asset, samples_le, stride_bytes, false)
+}
+
+fn hash_frame(
+    asset: &Asset,
+    samples_le: &[u8],
+    stride_bytes: usize,
+    with_sha256: bool,
+) -> Result<SampleHashes, Error> {
     asset.validate()?;
     let row = usize::try_from(asset.width)
         .ok()
@@ -245,15 +317,25 @@ pub fn frame_hash(asset: &Asset, samples_le: &[u8], stride_bytes: usize) -> Resu
         stride_bytes >= row && samples_le.len() >= need,
         "frame buffer/stride mismatch",
     )?;
-    let mut h = Sha256::new();
-    h.update(b"EVIF/frame/1\0");
-    h.update(asset.width.to_le_bytes());
-    h.update(asset.height.to_le_bytes());
-    h.update([asset.channels as u8, asset.samples as u8]);
+    let mut xxh3 = Xxh3::new();
+    let mut sha256 = with_sha256.then(Sha256::new);
+    let mut update = |bytes: &[u8]| {
+        xxh3.update(bytes);
+        if let Some(h) = &mut sha256 {
+            h.update(bytes);
+        }
+    };
+    update(b"EVIF/frame/1\0");
+    update(&asset.width.to_le_bytes());
+    update(&asset.height.to_le_bytes());
+    update(&[asset.channels as u8, asset.samples as u8]);
     for y in 0..height {
-        h.update(&samples_le[y * stride_bytes..y * stride_bytes + row]);
+        update(&samples_le[y * stride_bytes..y * stride_bytes + row]);
     }
-    Ok(Hash(h.finalize().into()))
+    Ok(SampleHashes {
+        xxh3_64: SampleHash(xxh3.digest()),
+        sha256: sha256.map(|h| Hash(h.finalize().into())),
+    })
 }
 
 /// Frames are ordered. PTS is the exact sum of preceding durations, beginning
@@ -262,7 +344,7 @@ pub fn frame_hash(asset: &Asset, samples_le: &[u8], stride_bytes: usize) -> Resu
 #[serde(deny_unknown_fields)]
 pub struct Frame {
     pub duration: Option<Rational>,
-    pub samples: Hash,
+    pub samples: SampleHashes,
 }
 impl Frame {
     pub(crate) fn hash(&self, h: &mut Sha256) {
@@ -270,7 +352,7 @@ impl Frame {
         if let Some(time) = self.duration {
             time.hash(h);
         }
-        h.update(self.samples.0);
+        h.update(self.samples.xxh3_64.0.to_le_bytes());
     }
 }
 
