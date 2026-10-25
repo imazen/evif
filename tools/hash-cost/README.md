@@ -43,3 +43,19 @@ thread, no Rayon, no `target-cpu=native`, and default crate CPU dispatch. RustCr
 `k12` 0.5.1 with `keccak` 0.2.2 selects its software backend on x86 by default;
 this is not a benchmark of K12's optimized SIMD ceiling. BLAKE3 and SHA-256 can
 use their default hardware acceleration. Report implementation costs accordingly.
+
+## WASM comparison
+
+```
+just hash-cost-wasm-build
+just hash-cost-wasm /absolute/artifact-directory wasmtime.json
+just hash-cost-wasm-v8 /absolute/artifact-directory v8.json
+```
+
+These recipes select XXH3-64/128, portable Rapidhash V3, MuseAir Standard-128
+and BLAKE3. The module explicitly requires SIMD128, including BLAKE3's
+`wasm32_simd` feature. Both engines run the same module and time the same Rust
+streaming calls; module loading/compilation is outside those measurements.
+WASI cannot inspect host load, so the guest resource gate is explicitly disabled.
+Use the host resource wrapper and record its results. Record the module hash,
+source commit, engine version and host CPU separately from guest metadata.

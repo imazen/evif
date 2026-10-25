@@ -189,10 +189,16 @@ fn main() {
             .expect("usage: evif-hash-cost output.json"),
     );
     assert!(!output.exists(), "refusing to overwrite results");
-    let algorithms = if std::env::args().nth(2).as_deref() == Some("--xxh3-only") {
-        &[Algorithm::Xxh3, Algorithm::Xxh3_128][..]
-    } else {
-        &ALGORITHMS[..]
+    let algorithms = match std::env::args().nth(2).as_deref() {
+        Some("--xxh3-only") => &[Algorithm::Xxh3, Algorithm::Xxh3_128][..],
+        Some("--portable-only") => &[
+            Algorithm::Xxh3,
+            Algorithm::Xxh3_128,
+            Algorithm::Rapid,
+            Algorithm::Muse,
+            Algorithm::Blake3,
+        ][..],
+        _ => &ALGORITHMS[..],
     };
     let result = zenbench::run(|suite| benchmarks(suite, algorithms));
     result.save(&output).expect("save complete samples");

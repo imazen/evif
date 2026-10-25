@@ -67,6 +67,17 @@ hash-cost output:
 hash-cost-xxh3 output:
     {{heavy}} tools/hash-cost/target/release/evif-hash-cost {{output}} --xxh3-only
 
+# WASI benchmark; SIMD is an explicit module requirement, not runtime detection.
+hash-cost-wasm-build:
+    RUSTFLAGS='-C target-feature=+simd128' {{heavy}} cargo build --release --manifest-path tools/hash-cost/Cargo.toml --target wasm32-wasip1 --features blake3/wasm32_simd
+
+# Pass a guest-visible output path under the preopened artifact directory.
+hash-cost-wasm artifacts output:
+    {{heavy}} wasmtime run --dir {{artifacts}}::/artifacts --env TMPDIR=/artifacts --env ZENBENCH_NO_BUSY_GATE=1 tools/hash-cost/target/wasm32-wasip1/release/evif-hash-cost.wasm /artifacts/{{output}} --portable-only
+
+hash-cost-wasm-v8 artifacts output:
+    {{heavy}} node tools/hash-cost/run-wasi.mjs tools/hash-cost/target/wasm32-wasip1/release/evif-hash-cost.wasm {{artifacts}} {{output}}
+
 hash-cost-check:
     cargo fmt --manifest-path tools/hash-cost/Cargo.toml --check
     {{heavy}} cargo clippy --release --manifest-path tools/hash-cost/Cargo.toml -- -D warnings
