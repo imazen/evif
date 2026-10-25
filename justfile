@@ -69,7 +69,7 @@ hash-cost-xxh3 output:
 
 # WASI benchmark; SIMD is an explicit module requirement, not runtime detection.
 hash-cost-wasm-build:
-    RUSTFLAGS='-C target-feature=+simd128' {{heavy}} cargo build --release --manifest-path tools/hash-cost/Cargo.toml --target wasm32-wasip1 --features blake3/wasm32_simd
+    RUSTFLAGS='-C target-feature=+simd128' {{heavy}} python3 tools/hash-cost/build-wasi.py
 
 # Pass a guest-visible output path under the preopened artifact directory.
 hash-cost-wasm artifacts output:

@@ -59,3 +59,9 @@ streaming calls; module loading/compilation is outside those measurements.
 WASI cannot inspect host load, so the guest resource gate is explicitly disabled.
 Use the host resource wrapper and record its results. Record the module hash,
 source commit, engine version and host CPU separately from guest metadata.
+
+`build-wasi.py` prepares a separate copy of pinned zenbench 0.1.10 under
+`TMPDIR`. It replaces unsupported WASI scratch/PID discovery and disables the
+guest cross-process lock. It does not change timing or statistics. Original
+dependency sources and the native lockfile are preserved. This research-only
+compatibility patch avoids changing the measurement engine to a newer release.
