@@ -1,0 +1,36 @@
+# Hash cost experiment
+
+Research tool only. It does not change EVIF's wire algorithms or add dependencies
+to the shipped crates. The lockfile pins implementation versions. Libraries are
+used under their own licenses, without vendoring or modifying their algorithms.
+
+```
+just hash-cost-build
+just hash-cost-check
+just hash-cost /absolute/path/to/new-results.json
+```
+
+Set `TMPDIR` to persistent scratch and `HEAVY` to the machine's resource wrapper.
+Save stdout/stderr to a log alongside the results. The output path must not exist.
+Record source commit, CPU, compiler and command when publishing results.
+
+The eight arms use incremental APIs: XXH3-64 (zenhash), portable Rapidhash v3
+with default C-compatible secrets, MuseAir v2 Standard-128 with zero seeds,
+SHA-256, BLAKE3's ordinary unkeyed mode, KT128, KT256, and NIST Ascon-Hash256.
+Both KT functions use empty customization and produce 32 bytes. All crypto arms
+produce 32 bytes; noncrypto arms retain their native 8/16-byte digest widths.
+
+Each timed call creates a hasher, consumes an already allocated deterministic
+byte pattern, and finalizes. There is no allocation, decoding, file I/O, padding
+removal or format metadata inside the timed call. Cases are 64 B, 4 KiB, 1 MiB,
+and 64 MiB. Large inputs are measured both as a single update and as 16 KiB
+updates. These model update granularity, not an actual strided image or a full
+decoder pipeline. Known-answer examples and chunk-boundary equivalence checks
+run before timing. `--check` runs these controls without benchmarking.
+
+Zenbench interleaves 30 rounds per group. Input is reused; these are warm/repeated
+buffer measurements, not cold-file or storage throughput. There is one hashing
+thread, no Rayon, no `target-cpu=native`, and default crate CPU dispatch. RustCrypto
+`k12` 0.5.1 with `keccak` 0.2.2 selects its software backend on x86 by default;
+this is not a benchmark of K12's optimized SIMD ceiling. BLAKE3 and SHA-256 can
+use their default hardware acceleration. Report implementation costs accordingly.

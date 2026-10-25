@@ -1,0 +1,25 @@
+[package]
+name = "evif-hash-cost"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+# Research-only dependencies, isolated from EVIF's shipped dependency graph.
+[workspace]
+
+[dependencies]
+zenbench = { git = "https://github.com/imazen/zenbench", rev = "075f80b86bb78bbf11984e28a01a73cd3524f5ae", default-features = false }
+zenhash = { git = "https://github.com/imazen/zenhash", rev = "7774776d2eb7b27da06efd8e090df60fa08e9bb8" }
+blake3 = "=1.8.7"
+sha2 = "=0.11.1"
+k12 = "=0.5.1"
+ascon-hash256 = "=0.1.0"
+museair = "=0.6.0"
+rapidhash = "=4.5.1"
+
+[profile.release]
+lto = "thin"
+debug = false
+
+[lints.rust]
+unsafe_code = "forbid"

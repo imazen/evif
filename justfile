@@ -56,3 +56,15 @@ contract-check:
 # Independent framing/media-hash parser and FFmpeg read-back of APNG wire fixtures.
 wire-oracle artifacts:
     {{heavy}} python3 tools/wire_oracle.py --decode-apng {{artifacts}}/*.evif
+
+# Isolated research tool; no additional dependencies in the shipped crates.
+hash-cost-build:
+    {{heavy}} cargo build --release --manifest-path tools/hash-cost/Cargo.toml
+
+hash-cost output:
+    {{heavy}} tools/hash-cost/target/release/evif-hash-cost {{output}}
+
+hash-cost-check:
+    cargo fmt --manifest-path tools/hash-cost/Cargo.toml --check
+    {{heavy}} cargo clippy --release --manifest-path tools/hash-cost/Cargo.toml -- -D warnings
+    tools/hash-cost/target/release/evif-hash-cost --check
