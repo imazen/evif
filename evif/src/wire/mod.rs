@@ -9,7 +9,7 @@ mod model;
 mod stream;
 pub use model::*;
 #[cfg(feature = "std")]
-pub use stream::{Writer, append_score, read};
+pub use stream::{Writer, append_record, append_score, read};
 
 use alloc::{
     collections::{BTreeMap, BTreeSet},

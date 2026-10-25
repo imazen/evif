@@ -31,7 +31,10 @@ evif: stress-test image quality metrics with a self-reporting container
   evif render  --family F --out DIR (--qualities 5,10,... | --params FILE.jsonl)
                [--format png|imij|native|evif] [--rendition png|imij] [--omit-bits]
                IMAGE.png...        encode with a family and record DIR/render.tsv
-  evif list                        families, judges and score keys";
+  evif list                        families, judges and score keys
+  evif wire inspect FILE           inspect major-1 media and payload integrity
+  evif wire pack PLAN.json OUTPUT  package symmetric still/video assets
+  evif wire append FILE SCORE.json append a major-1 evaluation record";
 
 /// Run the CLI and exit with its status.
 pub fn main(registry: &Registry) -> ! {
@@ -51,6 +54,7 @@ pub fn main(registry: &Registry) -> ! {
 
 pub fn run(registry: &Registry, args: &[String]) -> Res<()> {
     match args.first().map(String::as_str) {
+        Some("wire") => crate::wire_cli::run(&args[1..]),
         Some("probe") => probe(registry, &args[1..]),
         Some("inspect") => inspect(&args[1..]),
         Some("verify") => verify(registry, &args[1..]),

@@ -17,3 +17,4 @@ pub mod write;
 /// Errors here are reported to a person running the CLI, so a message is
 /// enough.
 pub type Res<T> = Result<T, String>;
+mod wire_cli;

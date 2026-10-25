@@ -249,6 +249,17 @@ pub fn append_score<F: Read + Write + Seek>(
     score: &ScoreRecord,
     limits: Limits,
 ) -> Result<(), Error> {
+    append_record(file, *b"scor", &serde_json::to_vec(score)?, limits)
+}
+
+/// Append a validated scoring or ancillary record, preserving its body bytes
+/// exactly. Same caller synchronization requirements as [`append_score`].
+pub fn append_record<F: Read + Write + Seek>(
+    file: &mut F,
+    tag: [u8; 4],
+    body: &[u8],
+    limits: Limits,
+) -> Result<(), Error> {
     file.seek(SeekFrom::Start(0))?;
     let state = read_state(file, limits)?;
     let mut writer = Writer {
@@ -256,7 +267,7 @@ pub fn append_score<F: Read + Write + Seek>(
         state,
         poisoned: false,
     };
-    writer.score(score)?;
+    writer.record(tag, body)?;
     writer.finish()?;
     Ok(())
 }
