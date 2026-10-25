@@ -53,10 +53,18 @@ their spans for lossless pass-through. External references remain unresolved.
 
 `frame_hash` accepts strided, little-endian raw rows and preserves float bits.
 It returns canonical XXH3-128 and optional SHA-256 checks in `SampleHashes`, computing
-both by default in one traversal. `frame_hash_xxh3` computes only XXH3; omitting
+both by default in one traversal. `SampleHashes.canonical` holds the identity;
+`checks` holds optional checks. Each hash is an `{algorithm, digest}` object with
+variable-length lowercase hex. Unknown sample algorithms and larger digests are
+preserved without implying decoded-sample verification. `frame_hash_xxh3` computes
+only XXH3; omitting
 SHA-256 does not change media identity. Both hash the same descriptor and samples,
-excluding row padding, without color conversion. Media roots use the canonical
-XXH3 digests and are not cryptographic commitments to the raw pixels.
+excluding row padding, without color conversion. Media roots bind
+canonical algorithm IDs, lengths and digest bytes. With the default XXH3-128
+canonical algorithm, these roots are not cryptographic commitments to raw pixels.
+Embedded payload `hash` and MEND `hash` currently require `sha256` for verification;
+unsupported algorithms produce an explicit error. External payload hashes and
+external score references may preserve unknown algorithms.
 `append_record` preserves scoring JSON spelling;
 `append_score` serializes a typed envelope. Both require exclusive application
 control of the file during validation and append.
@@ -76,6 +84,10 @@ algorithms when present. Both tools are required for this check; missing tools
 are errors. The oracle retains extracted payloads beside the
 fixtures. It is deliberately limited to small RGBA16 PQ/HLG APNG fixtures and
 refuses other profiles when decoding is requested.
+
+The [tagged-hash verification record](../benchmarks/hash-records-2026-10-25.pointer.md)
+also covers unknown sample algorithms and larger digests with an independent
+media-root calculation.
 
 These checks do not establish CVVDP/HDR-VDP execution, display-accurate HDR playback,
 native YCbCr storage, or unresolved gain-map rendering. Those are separate adapters

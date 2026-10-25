@@ -6,6 +6,11 @@ All notable changes to this repository. Format: [Keep a Changelog](https://keepa
 
 ### QUEUED BREAKING CHANGES
 
+- Major-1 hashes now use `{algorithm, digest}` records with variable-length hex.
+  Samples use `canonical` plus optional `checks`; payloads and MEND use `hash`,
+  and score references carry tagged hashes. Media domain revision 4 binds the
+  canonical algorithm, digest length and bytes. Unknown sample algorithms are
+  preserved; unsupported payload/root verification returns an error (`6fb85af4`).
 - Canonical major-1 sample hashes now use XXH3-128 through zenhash.
   `SampleHash` wraps `u128`; `SampleHashes.xxh3_128` serializes as `xxh3-128`
   with 32 lowercase hex digits. Media roots use domain revision 3 and bind all

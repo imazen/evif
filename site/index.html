@@ -165,11 +165,12 @@
     <tr><td>MEND</td><td>SHA-256 media identities binding canonical XXH3 sample digests, interpretation, timing and looping</td></tr>
     <tr><td>scor</td><td>Appendable evaluation envelope and adapter-owned JSON; corrections explicitly supersede earlier scores</td></tr>
   </table></div>
-  <p style="margin-top:16px">XXH3-128 is canonical for decoded samples. An optional SHA-256 check covers
+  <p style="margin-top:16px">XXH3-128 is the default canonical hash for decoded samples. An optional SHA-256 check covers
     the same bytes; writers emit both by default. Adding or removing that extra check leaves media
     identity unchanged. The media root is not a cryptographic commitment to raw samples.</p>
   <p>Media identity survives lossless repacking. Embedded payload hashes are
-    optional; external payloads require SHA-256 and are never fetched automatically. Scores and notes
+    optional; external payloads require a hash and are never fetched automatically.
+    Hash records name their algorithm and accept longer digests without a new layout. Scores and notes
     have no mandatory checksum, and there is no whole-file seal.</p>
   <p>Unknown uppercase-first records are critical and must be refused. Lowercase ancillary records
     can pass through unchanged. Streaming readers index bounded metadata and payload locations.

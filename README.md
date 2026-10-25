@@ -19,7 +19,8 @@ the new container does not itself run video metrics or render an HDR display.
 Use [`evif wire pack`, `inspect`, and `append`](docs/wire-tools.md) for major-1 files.
 Decoded samples use canonical XXH3-128 with an optional SHA-256 check; adding that
 check does not change media identity. The writer's frame-hashing helper emits both
-by default, with an XXH3-only path available.
+by default, with an XXH3-only path available. Hash records carry explicit
+algorithm IDs and variable-length digests so future hashes fit the same grammar.
 The Rust implementation uses our [zenhash](https://github.com/imazen/zenhash)
 crate; see the [hash selection evidence](benchmarks/hash-portability-2026-10-25.md).
 
