@@ -22,7 +22,7 @@ fn reference() -> Rgb8Image {
             let edge = if x > w / 2 { 60 } else { 0 };
             let noise = (rng.unit() * 24.0) as u8;
             data.push(((x * 255) / w) as u8 ^ noise);
-            data.push(((y * 255) / h) as u8 + edge);
+            data.push((((y * 255) / h) as u8).wrapping_add(edge));
             data.push((((x + y) * 3) % 256) as u8);
         }
     }
