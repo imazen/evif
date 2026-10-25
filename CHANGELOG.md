@@ -6,6 +6,8 @@ All notable changes to this repository. Format: [Keep a Changelog](https://keepa
 
 ### QUEUED BREAKING CHANGES
 
+- Opt-in wire major 1 has new framing and media semantics; major-0 readers refuse
+  it. The legacy Rust API and probe commands retain their format (`f12f8cca`).
 - The format is draft v0: chunk layouts may change until the first tagged release.
 - Draft 0.1 replaces `Evif.png` with `Evif.rendition`, adds `Bpp::Recorded`,
   and writes PNGF/IMIJ instead of PIXL. Legacy PIXL files remain readable;
@@ -29,6 +31,10 @@ All notable changes to this repository. Format: [Keep a Changelog](https://keepa
 ## evif
 
 ### Added
+- Major-1 symmetric still/video assets, u64 record lengths, exact rational timing,
+  SDR/PQ/HLG/linear-float profiles, segmented PNGF/IMIJ, optional BITS, SHA-256
+  sample/media identities, and appendable scoring envelopes. Includes bounded
+  streaming I/O and a no_std slice reader (`f12f8cca`, `0f81010f`).
 - Exactly one PNGF or IMIJ reference decode; optional BITS with recorded codec,
   size and checksum in BINF. EVIF-specific candidate coding belongs in BITS
   (`a6f005be`).
@@ -40,6 +46,12 @@ All notable changes to this repository. Format: [Keep a Changelog](https://keepa
   independent XXH3 implementation, strided rows.
 
 ## evif-probe
+
+### Added
+- `evif wire pack`, `inspect`, and `append`; score JSON passes through byte for
+  byte and existing outputs are not overwritten (`0f81010f`).
+- Real PQ/HLG APNG wire fixtures with symmetric assets and an independent Python
+  framing/hash reader plus FFmpeg sample verification (`0d6cdfc7`).
 
 ### Changed
 - Reference codec registration supports companion IMIJ implementations. Storage

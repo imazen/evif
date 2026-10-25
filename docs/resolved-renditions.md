@@ -1,10 +1,11 @@
 # Resolved SDR and HDR renditions
 
 Design contract, 2026-10-25. This specializes the
-[HDR/video proposal](hdr-video-evaluations.md); it does not change the currently
-implemented still-image wire format. `tools/contracts/rendition.py` checks the
-descriptor and storage-plan rules below. It does not decode carriers or certify
-that their pixels match the descriptor.
+[HDR/video proposal](hdr-video-evaluations.md). The implemented
+[major-1 wire format](../SPEC.md) uses the same resolved-signal boundary with a
+smaller wire schema: cumulative exact durations, implicit straight alpha and
+progressive complete frames, and rational luminance scaling. The Python prototype
+below remains a design check, not the wire schema or a carrier decoder.
 
 ## One rendition is enough
 
@@ -121,12 +122,12 @@ revision; this profile does not change the current SEAL behavior.
 
 ## Execution gates
 
-Before claiming EVIF SDR/HDR video playback, implement the versioned container
-reader/writer and bounded segment index, then verify carrier samples, interpretation
-and timing against the media description. Add cross-carrier repacking checks that
+The major-1 reader/writer and bounded metadata index now implement transport.
+Before claiming general SDR/HDR playback, verify carrier samples, interpretation
+and timing against the media description for every admitted decoder. Add cross-carrier repacking checks that
 preserve the media identity, including float bits and transparent RGB. Exercise
 VFR, loops, one-frame sequences, segment boundaries and malformed/truncated inputs.
-Existing [carrier tests](../evif-probe/tests/sequence_carriers.rs) establish some
-APNG feasibility; they do not satisfy these container gates. Metric adapters and
+Existing [carrier tests](../evif-probe/tests/sequence_carriers.rs) now exercise
+real PQ/HLG APNG through the container and an independent decode oracle. Metric adapters and
 display-accurate playback are additional consumers, not requirements for storing
 and extracting the rendition.

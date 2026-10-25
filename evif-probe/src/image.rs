@@ -84,7 +84,7 @@ impl Rgb8Image {
         Self::new(w, h, data)
     }
 
-    /// Encode as a lossless PNG with no color chunks (SPEC section 4).
+    /// Encode as a lossless PNG with no color chunks (legacy wire spec section 4).
     pub fn to_png(&self) -> Res<Vec<u8>> {
         let bytes = zenpng::encode_rgb8(
             self.imgref(),

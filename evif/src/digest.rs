@@ -1,4 +1,4 @@
-//! Pixel digests (`DIGS`, SPEC section 5).
+//! Legacy pixel digests (`DIGS`, docs/legacy-wire-0.md section 5).
 
 use zenhash::Xxh3;
 

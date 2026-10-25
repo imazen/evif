@@ -1,9 +1,10 @@
 # HDR, sequences, and reproducible evaluations
 
-Design proposal, 2026-10-25. **This is not implemented EVIF HDR/video support.**
-[The current format](../SPEC.md) remains one sRGB still; the probe and its
-rendition plugin still take RGB8. The executable checks below test the proposed
-semantics and the existing carriers, not a new container reader or metric runner.
+Evaluation design, 2026-10-25. The [major-1 wire format](../SPEC.md) now implements
+symmetric SDR/HDR still/video asset transport and appendable score envelopes.
+The legacy probe and rendition plugin still take RGB8; metric adapters and
+display rendering described here remain design work. The executable Python checks
+below test evaluation semantics, separately from the Rust wire reader/writer.
 
 The [CVVDP/HDR-VDP source audit](vdp-input-audit.md) identifies concrete adapter
 gaps and the additional photometry, spectral-emission, observer and task bindings

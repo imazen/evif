@@ -11,6 +11,13 @@ lossless reference decode, and the score every metric gave it. The original
 encoded bytes can be retained or omitted with their size and checksum recorded.
 Anyone can re-run the metrics and check the recorded scores.
 
+The new [major-1 wire format](SPEC.md) stores reference and candidate with identical
+SDR/HDR still/video asset records, optional original bytes, and appendable scoring
+JSON. `evif::wire` reads/writes it without buffering whole payloads. The probe
+commands below still use the [legacy still format](docs/legacy-wire-0.md);
+the new container does not itself run video metrics or render an HDR display.
+Use [`evif wire pack`, `inspect`, and `append`](docs/wire-tools.md) for major-1 files.
+
 It is built for perceptual-metric research: finding the encodes a metric gets wrong,
 so the metric can be fixed before an encoder is tuned against it.
 
