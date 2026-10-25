@@ -8,6 +8,12 @@ All notable changes to this repository. Format: [Keep a Changelog](https://keepa
 
 - The format is draft v0: chunk layouts may change until the first tagged release.
 
+## Workspace
+
+### Changed
+- Website and README use haunted-file artwork, with a responsive violet and lime
+  theme and matching SVG icons (`486fee4e`).
+
 ## evif
 
 ### Added
