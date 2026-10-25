@@ -6,6 +6,8 @@ used under their own licenses, without vendoring or modifying their algorithms.
 
 [Measured costs and selection notes](../../benchmarks/hash-cost-2026-10-25.md)
 include the CPU, implementation caveats, all cases and retained raw results.
+The [XXH3 width comparison](../../benchmarks/xxh3-widths-2026-10-25.md) measures
+64/128-bit costs and separates output stability from statistical-test results.
 
 ```
 just hash-cost-build
