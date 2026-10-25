@@ -1,7 +1,7 @@
 //! EVIF, the evil image format.
 //!
 //! An EVIF file wraps one distorted image for image-quality-metric testing:
-//! the interior bitstream an encoder produced, a lossless PNG rendition of the
+//! the interior bitstream an encoder produced, a lossless PNG or IMIJ rendition of the
 //! decoded pixels, the recipe that made it, and the metric scores computed on
 //! that rendition. The byte layout is in `SPEC.md` at the repository root.
 //!
@@ -30,7 +30,7 @@ pub const SIGNATURE: [u8; 8] = [0x8B, b'E', b'V', b'I', b'F', 0x0D, 0x0A, 0x1A];
 /// Major version this crate writes and reads.
 pub const MAJOR: u8 = 0;
 /// Minor version this crate writes.
-pub const MINOR: u8 = 0;
+pub const MINOR: u8 = 1;
 
 const HEADER_LEN: usize = 12;
 
@@ -129,10 +129,64 @@ pub struct Bitstream {
     pub data: Vec<u8>,
 }
 
+/// Storage of the exact raster that the metrics scored.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum RenditionFormat {
+    /// A complete PNG in a `PNGF` chunk.
+    Png,
+    /// A complete lossless IMI file in an `IMIJ` chunk.
+    Imij,
+}
+
+impl RenditionFormat {
+    pub fn tag(self) -> FourCc {
+        match self {
+            Self::Png => *b"PNGF",
+            Self::Imij => *b"IMIJ",
+        }
+    }
+    pub fn extension(self) -> &'static str {
+        match self {
+            Self::Png => "png",
+            Self::Imij => "imi",
+        }
+    }
+}
+
+/// One authoritative reference decode, independent of the candidate codec.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Rendition {
+    pub format: RenditionFormat,
+    pub data: Vec<u8>,
+}
+
+/// Recorded candidate encoding provenance (`BINF`).
+///
+/// When `BITS` is absent, these are recorded observations, not measurements
+/// independently verifiable from this file. XXH3 is an accidental-damage
+/// checksum, not authentication.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BitstreamInfo {
+    pub codec: FourCc,
+    pub bytes: u64,
+    pub xxh3: u64,
+}
+
+impl BitstreamInfo {
+    pub fn from_bitstream(bits: &Bitstream) -> Self {
+        Self {
+            codec: bits.codec,
+            bytes: bits.data.len() as u64,
+            xxh3: zenhash::xxh3_64(&bits.data),
+        }
+    }
+}
+
 /// The `DIGS` chunk.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Digests {
-    /// Digest of the `PIXL` raster.
+    /// Digest of the authoritative reference decode.
     pub distorted: u64,
     /// Digest of the reference raster the scores compare against.
     pub reference: Option<u64>,
@@ -143,6 +197,8 @@ pub struct Digests {
 pub enum Bpp {
     /// From the interior bitstream in `BITS`.
     Interior(f64),
+    /// From `BINF` when candidate bytes are omitted.
+    Recorded(f64),
     /// From the `clam` chunk: a synthetic distortion's pretend size.
     Claimed(f64),
 }
@@ -159,8 +215,9 @@ pub struct Unknown {
 pub struct Evif {
     pub header: Header,
     pub bits: Option<Bitstream>,
-    /// PNG bytes of the rendition (`PIXL` format `"png "`).
-    pub png: Vec<u8>,
+    pub rendition: Rendition,
+    /// Optional recorded candidate size and checksum, checked against BITS when present.
+    pub bitstream_info: Option<BitstreamInfo>,
     pub digests: Digests,
     pub claimed_bytes: Option<u64>,
     pub source: Option<Source>,
@@ -172,10 +229,23 @@ pub struct Evif {
 impl Evif {
     /// A file with the required chunks and nothing else.
     pub fn new(header: Header, png: Vec<u8>, distorted_digest: u64) -> Self {
+        Self::with_rendition(
+            header,
+            Rendition {
+                format: RenditionFormat::Png,
+                data: png,
+            },
+            distorted_digest,
+        )
+    }
+
+    /// Construct a file with exactly one lossless reference decode.
+    pub fn with_rendition(header: Header, rendition: Rendition, distorted_digest: u64) -> Self {
         Self {
             header,
             bits: None,
-            png,
+            rendition,
+            bitstream_info: None,
             digests: Digests {
                 distorted: distorted_digest,
                 reference: None,
@@ -188,11 +258,30 @@ impl Evif {
         }
     }
 
-    /// Interior bits per pixel, or the claimed size when there is no bitstream.
+    /// Remove candidate bytes while retaining their measured size and checksum.
+    pub fn omit_bits(&mut self) {
+        if let Some(bits) = self.bits.take() {
+            self.bitstream_info = Some(BitstreamInfo::from_bitstream(&bits));
+        }
+    }
+
+    fn validate_bitstream_info(&self) -> Result<(), Error> {
+        if let (Some(bits), Some(info)) = (&self.bits, self.bitstream_info)
+            && BitstreamInfo::from_bitstream(bits) != info
+        {
+            return Err(Error::Corrupt("BINF differs from BITS"));
+        }
+        Ok(())
+    }
+
+    /// Embedded, recorded, or synthetic claimed candidate bits per pixel.
+    /// Rendition storage and container overhead never enter this quantity.
     pub fn bits_per_pixel(&self) -> Option<Bpp> {
         let px = self.header.pixels() as f64;
         if let Some(b) = &self.bits {
             Some(Bpp::Interior(b.data.len() as f64 * 8.0 / px))
+        } else if let Some(info) = self.bitstream_info {
+            Some(Bpp::Recorded(info.bytes as f64 * 8.0 / px))
         } else {
             self.claimed_bytes
                 .map(|c| Bpp::Claimed(c as f64 * 8.0 / px))
@@ -202,8 +291,9 @@ impl Evif {
     /// Serialize to bytes.
     pub fn to_bytes(&self) -> Result<Vec<u8>, Error> {
         self.header.validate()?;
+        self.validate_bitstream_info()?;
         let mut out = Vec::with_capacity(
-            self.png.len() + self.bits.as_ref().map_or(0, |b| b.data.len()) + 256,
+            self.rendition.data.len() + self.bits.as_ref().map_or(0, |b| b.data.len()) + 256,
         );
         out.extend_from_slice(&SIGNATURE);
         out.extend_from_slice(&[MAJOR, MINOR, 0, 0]);
@@ -220,7 +310,22 @@ impl Evif {
         if let Some(b) = &self.bits {
             put_chunk(&mut out, *b"BITS", &[&b.codec, &b.data])?;
         }
-        put_chunk(&mut out, *b"PIXL", &[b"png ", &self.png])?;
+        if let Some(info) = self.bitstream_info {
+            put_chunk(
+                &mut out,
+                *b"BINF",
+                &[
+                    &info.codec,
+                    &info.bytes.to_le_bytes(),
+                    &info.xxh3.to_le_bytes(),
+                ],
+            )?;
+        }
+        put_chunk(
+            &mut out,
+            self.rendition.format.tag(),
+            &[&self.rendition.data],
+        )?;
 
         let d = &self.digests;
         let mut digs = Vec::with_capacity(19);
@@ -273,7 +378,8 @@ impl Evif {
 
         let mut header = None;
         let mut bits = None;
-        let mut png = None;
+        let mut rendition = None;
+        let mut bitstream_info = None;
         let mut digests = None;
         let mut claimed_bytes = None;
         let mut source = None;
@@ -321,15 +427,40 @@ impl Evif {
                         data: body[4..].to_vec(),
                     });
                 }
+                b"PNGF" | b"IMIJ" => {
+                    once(&rendition)?;
+                    rendition = Some(Rendition {
+                        format: if tag == *b"PNGF" {
+                            RenditionFormat::Png
+                        } else {
+                            RenditionFormat::Imij
+                        },
+                        data: body.to_vec(),
+                    });
+                }
+                b"BINF" => {
+                    once(&bitstream_info)?;
+                    if body.len() != 20 {
+                        return Err(Error::Corrupt("BINF is not 20 bytes"));
+                    }
+                    bitstream_info = Some(BitstreamInfo {
+                        codec: body[..4].try_into().unwrap(),
+                        bytes: u64::from_le_bytes(body[4..12].try_into().unwrap()),
+                        xxh3: u64::from_le_bytes(body[12..20].try_into().unwrap()),
+                    });
+                }
                 b"PIXL" => {
-                    once(&png)?;
+                    once(&rendition)?;
                     if body.len() < 4 {
                         return Err(Error::Corrupt("PIXL too short"));
                     }
                     if body[..4] != *b"png " {
                         return Err(Error::Unsupported(body[..4].try_into().unwrap()));
                     }
-                    png = Some(body[4..].to_vec());
+                    rendition = Some(Rendition {
+                        format: RenditionFormat::Png,
+                        data: body[4..].to_vec(),
+                    });
                 }
                 b"DIGS" => {
                     once(&digests)?;
@@ -380,24 +511,38 @@ impl Evif {
         if !sealed {
             return Err(Error::Corrupt("missing SEAL (truncated?)"));
         }
-        Ok(Self {
+        let result = Self {
             header: header.ok_or(Error::Corrupt("missing HEAD"))?,
             bits,
-            png: png.ok_or(Error::Corrupt("missing PIXL"))?,
+            rendition: rendition.ok_or(Error::Corrupt("missing reference decode"))?,
+            bitstream_info,
             digests: digests.ok_or(Error::Corrupt("missing DIGS"))?,
             claimed_bytes,
             source,
             recipe,
             scores,
             unknown,
-        })
+        };
+        result.validate_bitstream_info()?;
+        Ok(result)
     }
 }
 
 fn is_known(tag: FourCc) -> bool {
     matches!(
         &tag,
-        b"HEAD" | b"BITS" | b"PIXL" | b"DIGS" | b"clam" | b"srce" | b"knob" | b"scor" | b"SEAL"
+        b"HEAD"
+            | b"BITS"
+            | b"BINF"
+            | b"PNGF"
+            | b"IMIJ"
+            | b"PIXL"
+            | b"DIGS"
+            | b"clam"
+            | b"srce"
+            | b"knob"
+            | b"scor"
+            | b"SEAL"
     )
 }
 

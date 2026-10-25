@@ -204,3 +204,108 @@ fn digest_separates_geometry() {
     let c = pixel_digest_u8(8, 1, Layout::Rgb, &px, 24).unwrap();
     assert!(a != b && b != c && a != c);
 }
+
+fn reseal(mut prefix: Vec<u8>) -> Vec<u8> {
+    let seal = xxhash_rust::xxh3::xxh3_64(&prefix);
+    prefix.extend_from_slice(b"SEAL");
+    prefix.extend_from_slice(&8u32.to_le_bytes());
+    prefix.extend_from_slice(&seal.to_le_bytes());
+    prefix
+}
+
+#[test]
+fn reference_decode_choices_and_legacy_pixl() {
+    use evif::{Rendition, RenditionFormat};
+    let png = sample_file();
+    let bytes = png.to_bytes().unwrap();
+    assert_eq!(bytes[9], 1);
+    let mut legacy = bytes[..12].to_vec();
+    legacy[9] = 0;
+    let mut at = 12;
+    while &bytes[at..at + 4] != b"SEAL" {
+        let len = u32::from_le_bytes(bytes[at + 4..at + 8].try_into().unwrap()) as usize;
+        if &bytes[at..at + 4] == b"PNGF" {
+            legacy.extend_from_slice(b"PIXL");
+            legacy.extend_from_slice(&((len + 4) as u32).to_le_bytes());
+            legacy.extend_from_slice(b"png ");
+            legacy.extend_from_slice(&bytes[at + 8..at + 8 + len]);
+        } else {
+            legacy.extend_from_slice(&bytes[at..at + 8 + len]);
+        }
+        at += 8 + len;
+    }
+    assert_eq!(Evif::from_bytes(&reseal(legacy)).unwrap(), png);
+    let mut imij = png.clone();
+    imij.rendition = Rendition {
+        format: RenditionFormat::Imij,
+        data: b"opaque IMI payload".to_vec(),
+    };
+    assert_eq!(Evif::from_bytes(&imij.to_bytes().unwrap()).unwrap(), imij);
+    // Two alternate reference decodes are ambiguous even when their tags differ.
+    for (tag, body) in [
+        (b"IMIJ", b"imi".as_slice()),
+        (b"PNGF", b"png"),
+        (b"PIXL", b"png old"),
+    ] {
+        assert_eq!(
+            Evif::from_bytes(&with_extra_chunk(tag, body)),
+            Err(Error::Corrupt("duplicate chunk"))
+        );
+    }
+}
+
+#[test]
+fn omitted_candidate_keeps_provenance_without_claiming_embedded_bytes() {
+    use evif::BitstreamInfo;
+    let mut file = sample_file();
+    let info = BitstreamInfo::from_bitstream(file.bits.as_ref().unwrap());
+    let rendition = file.rendition.clone();
+    let recipe = file.recipe.clone();
+    let scores = file.scores.clone();
+    file.omit_bits();
+    assert!(file.bits.is_none());
+    assert_eq!(file.bitstream_info, Some(info));
+    assert_eq!(file.bits_per_pixel(), Some(Bpp::Recorded(4.0)));
+    file.claimed_bytes = Some(999);
+    assert_eq!(file.bits_per_pixel(), Some(Bpp::Recorded(4.0)));
+    let back = Evif::from_bytes(&file.to_bytes().unwrap()).unwrap();
+    assert_eq!(back, file);
+    assert_eq!(back.rendition, rendition);
+    assert_eq!(back.recipe, recipe);
+    assert_eq!(back.scores, scores);
+    file.omit_bits();
+    assert_eq!(file.bitstream_info, Some(info));
+}
+
+#[test]
+fn candidate_provenance_mismatch_is_refused_even_after_resealing() {
+    use evif::BitstreamInfo;
+    let mut file = sample_file();
+    let info = BitstreamInfo::from_bitstream(file.bits.as_ref().unwrap());
+    file.bitstream_info = Some(info);
+    assert_eq!(Evif::from_bytes(&file.to_bytes().unwrap()).unwrap(), file);
+    for offset in [0, 4, 12] {
+        let mut payload = Vec::from(info.codec);
+        payload.extend_from_slice(&info.bytes.to_le_bytes());
+        payload.extend_from_slice(&info.xxh3.to_le_bytes());
+        payload[offset] ^= 1;
+        assert_eq!(
+            Evif::from_bytes(&with_extra_chunk(b"BINF", &payload)),
+            Err(Error::Corrupt("BINF differs from BITS"))
+        );
+    }
+    file.bits.as_mut().unwrap().data.push(0);
+    assert_eq!(
+        file.to_bytes(),
+        Err(Error::Corrupt("BINF differs from BITS"))
+    );
+}
+
+#[test]
+fn evif_specific_candidate_stays_in_bits() {
+    let mut file = sample_file();
+    file.bits.as_mut().unwrap().codec = *b"evif";
+    let back = Evif::from_bytes(&file.to_bytes().unwrap()).unwrap();
+    assert_eq!(back.bits.unwrap().codec, *b"evif");
+    assert_eq!(back.rendition.format, evif::RenditionFormat::Png);
+}
