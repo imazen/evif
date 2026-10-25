@@ -9,7 +9,8 @@ All notable changes to this repository. Format: [Keep a Changelog](https://keepa
 - Canonical major-1 sample hashes now use XXH3-128 through zenhash.
   `SampleHash` wraps `u128`; `SampleHashes.xxh3_128` serializes as `xxh3-128`
   with 32 lowercase hex digits. Media roots use domain revision 3 and bind all
-  16 digest bytes. Earlier draft files require rehashing their decoded samples.
+  16 digest bytes. Earlier draft files require rehashing their decoded samples
+  (`b76c35c2`). [Verification](benchmarks/wire-xxh128-2026-10-25.pointer.md).
 
 - The earlier major-1 draft introduced canonical XXH3-64 sample hashes with optional
   SHA-256 checks. `Frame.samples` and `frame_hash` use `SampleHashes`; that draft used media
