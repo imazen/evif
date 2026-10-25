@@ -82,3 +82,6 @@ hash-cost-check:
     cargo fmt --manifest-path tools/hash-cost/Cargo.toml --check
     {{heavy}} cargo clippy --release --manifest-path tools/hash-cost/Cargo.toml -- -D warnings
     tools/hash-cost/target/release/evif-hash-cost --check
+
+hash-quality-controls:
+    {{heavy}} cargo run --release --manifest-path tools/hash-cost/Cargo.toml --bin quality-controls
