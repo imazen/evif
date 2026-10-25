@@ -5,6 +5,13 @@ These are research results, not a change to EVIF's wire hash. They extend the
 [XXH3 width comparison](xxh3-widths-2026-10-25.md). Published SMHasher3 results
 and locally reproduced controls are identified separately.
 
+Decision, October 25, 2026: use our zenhash implementation. EVIF already depends
+on it. The canonical wire hash remains XXH3-64 with the standard default secret
+and zero seed; optional SHA-256 sample checks remain available. Selecting the
+implementation does not select a different digest width or change the wire
+contract. The measured portability and existing implementation support this
+choice; the statistical limitations documented below still apply.
+
 ## What the XXH3 failures mean
 
 The published [XXH3-64 report](https://gitlab.com/fwojcik/smhasher3/-/raw/main/results/raw/XXH3-64.txt)

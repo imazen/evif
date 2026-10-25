@@ -20,6 +20,8 @@ Use [`evif wire pack`, `inspect`, and `append`](docs/wire-tools.md) for major-1 
 Decoded samples use canonical XXH3-64 with an optional SHA-256 check; adding that
 check does not change media identity. The writer's frame-hashing helper emits both
 by default, with an XXH3-only path available.
+The Rust implementation uses our [zenhash](https://github.com/imazen/zenhash)
+crate; see the [hash selection evidence](benchmarks/hash-portability-2026-10-25.md).
 
 It is built for perceptual-metric research: finding the encodes a metric gets wrong,
 so the metric can be fixed before an encoder is tuned against it.
