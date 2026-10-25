@@ -52,3 +52,7 @@ sequence-oracle artifacts:
 # Executable design checks; no codec or metric inference is performed.
 contract-check:
     PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/contracts -p 'test_*.py' -v
+
+# Independent framing/media-hash parser and FFmpeg read-back of APNG wire fixtures.
+wire-oracle artifacts:
+    {{heavy}} python3 tools/wire_oracle.py --decode-apng {{artifacts}}/*.evif

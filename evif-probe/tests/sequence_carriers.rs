@@ -1,4 +1,4 @@
-//! Feasibility checks for the proposed sequence contract, not EVIF video support.
+//! Real APNG carriers through the major-1 container, without metric inference.
 use zencodec::animation::FrameDuration;
 use zencodec::encode::{AnimationFrameEncoder, EncodeJob, EncoderConfig};
 use zenpixels_convert::{Cicp, PixelDescriptor, PixelFormat, PixelSlice};
@@ -62,6 +62,7 @@ fn hdr_apng_preserves_samples_color_and_fractional_timing() {
             })
             .collect();
         std::fs::write(out.join(format!("{stem}.rgba64le")), expected_le).unwrap();
+        verify_wire_round_trip(&out, &stem, encoded.data(), cicp, &expected);
         let decoded = zenpng::decode_apng(
             encoded.data(),
             &zenpng::PngDecodeConfig::strict(),
@@ -93,6 +94,123 @@ fn hdr_apng_preserves_samples_color_and_fractional_timing() {
         }
     }
     println!("carrier artifacts: {}", out.display());
+}
+
+fn verify_wire_round_trip(
+    out: &std::path::Path,
+    stem: &str,
+    encoded: &[u8],
+    cicp: Cicp,
+    expected: &[Vec<u8>],
+) {
+    use evif::wire::*;
+    let a = Asset {
+        id: 1,
+        profile: "resolved-rgb/1".into(),
+        kind: Kind::Sequence,
+        width: 13,
+        height: 9,
+        channels: Channels::Rgba,
+        samples: Samples::U16,
+        primaries: Primaries::Bt2020,
+        transfer: if cicp.transfer_characteristics == 16 {
+            Transfer::Pq
+        } else {
+            Transfer::Hlg
+        },
+        domain: if cicp.transfer_characteristics == 16 {
+            Domain::DisplayAbsolute
+        } else {
+            Domain::SceneRelative
+        },
+        nits_per_unit: None,
+        pixel_aspect: Rational::new(1, 1).unwrap(),
+        frame_count: U64(3),
+        plays: Some(U64(2)),
+    };
+    let frames: Vec<_> = expected
+        .iter()
+        .zip([(1, 24), (1001, 30000), (7, 100)])
+        .map(|(bytes, (n, d))| {
+            let le: Vec<u8> = bytes
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .flat_map(|b| u16::from_ne_bytes(*b).to_le_bytes())
+                .collect();
+            Frame {
+                duration: Some(Rational::new(n, d).unwrap()),
+                samples: frame_hash(&a, &le, 13 * 8).unwrap(),
+            }
+        })
+        .collect();
+    let mut writer = Writer::new(Vec::new(), Limits::default()).unwrap();
+    let mut plans = Vec::new();
+    let mut assets = Vec::new();
+    for id in [1, 2] {
+        let a = Asset { id, ..a.clone() };
+        writer.asset(&a).unwrap();
+        let s = Segment {
+            asset: id,
+            first_frame: U64(0),
+            carrier: Carrier::Apng,
+            frames: frames.clone(),
+            storage: Storage::Embedded {
+                sha256: Some(Hash::of(encoded)),
+            },
+        };
+        writer
+            .segment(&s, &mut &encoded[..], encoded.len() as u64)
+            .unwrap();
+        plans.push(serde_json::json!({"segment":s, "path":format!("{stem}.png")}));
+        assets.push(a);
+    }
+    let roots = writer.finish_media().unwrap();
+    let score = ScoreRecord {
+        schema: 1,
+        id: "fixture-metadata".into(),
+        supersedes: None,
+        candidate: roots[1].sha256,
+        reference: Some(roots[0].sha256),
+        adapter: "transport-test/1".into(),
+        data: serde_json::json!({"status":"not-scored"}),
+    };
+    writer.score(&score).unwrap();
+    let (bytes, _) = writer.finish().unwrap();
+    let index = scan(&bytes, Limits::default()).unwrap();
+    assert_eq!(index.roots[0].sha256, index.roots[1].sha256);
+    for s in &index.segments {
+        let span = s.payload.unwrap();
+        let payload = &bytes[span.offset as usize..(span.offset + span.length) as usize];
+        assert_eq!(payload, encoded);
+        let decoded = zenpng::decode_apng(
+            payload,
+            &zenpng::PngDecodeConfig::strict(),
+            &enough::Unstoppable,
+        )
+        .unwrap();
+        for (decoded, declared) in decoded.frames.iter().zip(&s.segment.frames) {
+            let ne = decoded.pixels.copy_to_contiguous_bytes();
+            let le: Vec<u8> = ne
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .flat_map(|b| u16::from_ne_bytes(*b).to_le_bytes())
+                .collect();
+            assert_eq!(frame_hash(&a, &le, 13 * 8).unwrap(), declared.samples);
+        }
+    }
+    std::fs::write(out.join(format!("{stem}.evif")), bytes).unwrap();
+    std::fs::write(
+        out.join(format!("{stem}.plan.json")),
+        serde_json::to_vec_pretty(&serde_json::json!({"assets":assets,"segments":plans})).unwrap(),
+    )
+    .unwrap();
+    std::fs::write(
+        out.join(format!("{stem}.score.json")),
+        serde_json::to_vec_pretty(&score).unwrap(),
+    )
+    .unwrap();
 }
 
 #[test]
