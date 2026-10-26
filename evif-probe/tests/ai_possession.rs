@@ -34,6 +34,44 @@ fn jpegai_recipe_validation() {
     assert!(family.encode(&bad, &source()).is_err());
 }
 
+#[cfg(feature = "jpegai-models-test")]
+#[test]
+fn jpegai_native_bytes_decode_to_scored_pixels() {
+    let models = std::env::var_os("ZENJPEGAI_MODELS")
+        .expect("ZENJPEGAI_MODELS must point to the upstream checkpoint directory");
+    assert!(std::path::Path::new(&models).is_dir());
+    let source = Rgb8Image::new(
+        64,
+        64,
+        (0..64 * 64)
+            .flat_map(|i| {
+                let x = (i % 64) as u8;
+                let y = (i / 64) as u8;
+                [x * 4, y * 4, (x ^ y) * 4]
+            })
+            .collect(),
+    )
+    .unwrap();
+    let family = Registry::builtin().family("zenjpegai").unwrap();
+    let result = family
+        .encode(&family.baseline(50.0).unwrap(), &source)
+        .unwrap();
+    let bits = result.bits.unwrap();
+    assert_eq!(bits.codec, *b"jaic");
+    assert!(bits.data.starts_with(&[0xff, 0x80, 0xff, 0x82]));
+    assert_eq!((result.pixels.width, result.pixels.height), (64, 64));
+    let decoded = zenjpegai::Decoder::new(&models).decode(&bits.data).unwrap();
+    assert_eq!(
+        decoded.data,
+        result
+            .pixels
+            .data
+            .iter()
+            .map(|&v| u16::from(v))
+            .collect::<Vec<_>>()
+    );
+}
+
 #[cfg(feature = "possession-coolchic")]
 #[test]
 fn coolchic_native_bytes_decode_to_scored_pixels() {

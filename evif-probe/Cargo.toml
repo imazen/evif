@@ -20,6 +20,8 @@ possession-svt = ["dep:zenavif", "dep:almost-enough"]
 possession-jxl = ["dep:zenjxl"]
 possession-jpegai = ["dep:zenjpegai"]
 possession-coolchic = ["dep:zencoolchic", "dep:zenpixels"]
+# Explicit oracle gate: this test requires externally supplied upstream checkpoints.
+jpegai-models-test = ["possession-jpegai"]
 
 [dependencies]
 almost-enough = { version = "0.4.5", optional = true }

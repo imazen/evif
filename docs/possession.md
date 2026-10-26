@@ -39,8 +39,8 @@ JPEG AI model weights are separate data and must be retained with their own
 provenance for a fully reproducible run. Its quality-to-displacement mapping is
 uncalibrated. Cool-chic trains a model per image; 2000 iterations is its minimum
 and a sample can take substantial time. Its quality-to-lambda mapping is also
-uncalibrated. Run a small render
-before a broad search and keep the honest baseline from the same family.
+uncalibrated. Run a small render before a broad search and keep the honest
+baseline from the same family.
 
 The JXL baseline clamps quality to 1–99 to stay on the lossy path. SVT accepts
 1–100. Neither claims that a quality number means the same thing across codecs.
@@ -54,9 +54,11 @@ HDR samples and video are not exposed by these families.
 
 Each draw has an 80% chance of selecting one likely stress axis: SVT chroma
 quantization, QM, variance boost or sharpness/AC bias; JXL quantization, filters,
-resampling or chroma prediction. The other 20% combines controls, including speed,
-tune, transform restrictions, noise and decoding effort. Both portions sample
-quality uniformly, including aggressive compression. These weights are a search
+resampling or chroma prediction. JPEG AI prioritizes model ID, residual-variance
+scaling and channel gain; Cool-chic prioritizes coded architecture. The other
+20% combines each family's supported controls, including seeds and training
+budget for Cool-chic. Both portions sample quality uniformly, including
+aggressive compression. These weights are a search
 policy, not measured probabilities of finding a metric failure.
 
 SVT tune 3/4 override some QM, sharpness and variance settings inside the codec.
@@ -79,5 +81,13 @@ Run `just possession-check` and `just possession-test`. Set `HEAVY` to the
 resource wrapper for the machine. `EVIF_POSSESSION_ARTIFACTS` optionally exports
 native baseline bytes, the decoded PNG rendition and JSON parameters for an
 independent decoder check; it does not alter which tests run.
+
+With upstream JPEG AI checkpoints available, run
+`just jpegai-models-test /path/to/models`. This explicitly enables the
+model-backed encode/decode test; the ordinary feature-gated test checks recipe
+validation without requiring model data.
+
+[Model-backed JPEG AI and Cool-chic verification](../benchmarks/ai-possession-2026-10-26.pointer.md)
+records the exact checkpoint hashes and local test results.
 
 [Integration checks and retained artifacts](../benchmarks/possession-2026-10-26.pointer.md).

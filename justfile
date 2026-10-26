@@ -101,5 +101,8 @@ ai-possession-check:
 ai-possession-test:
     {{heavy}} cargo test -p evif-probe --features possession-jpegai,possession-coolchic --test registry_injection --test ai_possession -- --test-threads=1
 
+jpegai-models-test models:
+    ZENJPEGAI_MODELS='{{models}}' {{heavy}} cargo test -p evif-probe --features jpegai-models-test --test ai_possession -- --test-threads=1
+
 shared-pages-check:
     {{heavy}} cargo test --release -p evif --test wire
