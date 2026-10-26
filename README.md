@@ -193,10 +193,13 @@ and every score row names the implementation that produced it.
 
 Families and judges are plug-ins: `evif_probe::registry::Registry` holds the built-in
 set, and a companion binary can add its own and reuse the CLI (`evif_probe::cli::main`).
-That is how families and judges built on unpublished code join the same runs.
+Adding a codec needs one `Family` implementation and one `Registry::add_family`
+call; the search and output paths do not change. See the
+[injection guide](docs/codec-injection.md).
 
-Build with `--features possession` for both new codec families, or select
-`possession-svt` / `possession-jxl`. See [controls, replay and limits](docs/possession.md).
+Build with `--features possession` for AV1, JPEG XL, JPEG AI and Cool-chic, or
+select only the `possession-svt`, `possession-jxl`, `possession-jpegai` or
+`possession-coolchic` feature. See [controls, replay and limits](docs/possession.md).
 
 Coming: zenwebp and additional zenavif backends; a post-filter family with no rate
 constraint (sharpening, grain, hue, sub-pixel shift); a human-judgment loop.

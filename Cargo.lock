@@ -404,9 +404,12 @@ dependencies = [
  "serde_json",
  "zenavif",
  "zencodec",
+ "zencoolchic",
  "zenhash",
  "zenjpeg",
+ "zenjpegai",
  "zenjxl",
+ "zenpixels",
  "zenpixels-convert",
  "zenpng",
  "zenquant",
@@ -1627,6 +1630,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "zencoolchic"
+version = "0.0.1"
+source = "git+https://github.com/imazen/zencoolchic?rev=1cecd62037dd8a8fe14a8a46d872ae7165538b33#1cecd62037dd8a8fe14a8a46d872ae7165538b33"
+dependencies = [
+ "archmage 0.9.30",
+ "enough",
+ "libm",
+ "magetypes 0.9.30",
+ "rayon",
+ "whereat",
+ "zencodec",
+ "zenpixels",
+ "zenpixels-convert",
+]
+
+[[package]]
 name = "zenflate"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1670,6 +1689,18 @@ dependencies = [
  "zenmeta",
  "zenpixels",
  "zenyuv",
+]
+
+[[package]]
+name = "zenjpegai"
+version = "0.0.1"
+source = "git+https://github.com/imazen/zenjpegai?rev=1192fca6b6c2fdc4dcf29a6c8064c53a987caf59#1192fca6b6c2fdc4dcf29a6c8064c53a987caf59"
+dependencies = [
+ "archmage 0.9.30",
+ "enough",
+ "libm",
+ "magetypes 0.9.30",
+ "whereat",
 ]
 
 [[package]]

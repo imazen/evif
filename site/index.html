@@ -123,9 +123,11 @@
     <div class="card"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M7 4h12l6 6v18H7zM19 4v7h6M11 15h10M11 19h5"/><path d="m16 24 2 2 4-4"/></svg><h3>Record</h3><p>Freeze the samples and retain the recipe. Major 1 gives reference and candidate the same payload semantics, with optional original codec bytes. Append new evaluations as metrics evolve.</p></div>
   </div>
 
-  <p style="margin-top:20px">Possess JPEG, palette PNG, AV1 through zenav1-svt, or JPEG XL.
-    The opt-in <code>possession</code> build adds the AV1 and JXL families: quantization,
-    filtering and chroma controls first, with rarer combinations kept in the search.
+  <p style="margin-top:20px">Possess JPEG, palette PNG, AV1 through zenav1-svt, JPEG XL,
+    JPEG AI or Cool-chic. The opt-in <code>possession</code> build adds all four families.
+    New codecs register one family with the probe engine; each candidate is scored from
+    the pixels decoded from its real bitstream. JPEG AI needs external checkpoint weights,
+    and Cool-chic trains a model for each image.
     <a href="https://github.com/imazen/evif/blob/main/docs/possession.md">Build instructions and exposed controls</a>.</p>
 
   <h2>A probe finding <span class="m">· legacy major 0</span></h2>
@@ -155,7 +157,9 @@
     and checksum. One rendition per asset is sufficient.</p>
   <p>Major-1 IMIJ page bundles can store the pristine reference once and predict
     distorted renditions from it losslessly. Explicit page selections keep reference
-    and candidate samples separate; the codec uses independent coding when smaller.
+    and candidate samples separate: two <code>SEGM</code> records share one
+    self-contained <code>IMIJ</code> payload. Prediction never points to an external file;
+    the codec uses independent coding when smaller.
     The same mapping supports corresponding frames of SDR or HDR sequences.</p>
   <p>The research companion probes native PQ16 and linear-float HDR stills under
     explicit viewing conditions, using CVVDP and HDR-VDP-3. It prioritizes both

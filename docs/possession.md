@@ -1,6 +1,6 @@
-# AV1 and JPEG XL possession
+# Codec possession
 
-Build the opt-in families with Rust 1.98 or later:
+Build the opt-in families with Rust 1.89 or later:
 
 ```sh
 cargo build --release -p evif-probe --features possession
@@ -9,13 +9,20 @@ target/release/evif probe --family zenav1-svt --target ssim2 \
     --samples 256 --keep 8 --out out/svt corpus/*.png
 target/release/evif probe --family zenjxl --target butteraugli \
     --samples 256 --keep 8 --out out/jxl corpus/*.png
+target/release/evif render --family zenjpegai --out out/jpegai \
+    --qualities 10,30,50,70,90 --format evif corpus/*.png
+target/release/evif render --family zencoolchic --out out/coolchic \
+    --qualities 10,30,50,70,90 --format evif corpus/*.png
 ```
 
-Enable only one with `possession-svt` or `possession-jxl`. The container crate
-and default probe build do not acquire these codec dependencies. The IMIJ-enabled
-companion can forward the same features and use `--rendition imij --omit-bits`.
+Set `ZENJPEGAI_MODELS` to the JPEG AI reference checkpoint directory before
+using `zenjpegai`; missing models are a hard encode error. Enable only one
+codec with `possession-svt`, `possession-jxl`, `possession-jpegai` or
+`possession-coolchic`. The container crate and default probe build do not
+acquire these codec dependencies. The IMIJ-enabled companion forwards the
+same features and can use `--rendition imij --omit-bits`.
 
-Both families take opaque sRGB RGB8 stills, write a real codec file, then decode
+These families take opaque sRGB RGB8 stills, write a real codec file, then decode
 that file to obtain the pixels scored and stored in the rendition. Encoded cost
 includes the complete AVIF file or JXL codestream. This is not an HDR/video probe.
 
@@ -23,6 +30,17 @@ includes the complete AVIF file or JXL codestream. This is not an HDR/video prob
 |---|---|---|
 | `zenav1-svt` | quality, speed, tune, variance boost/strength/octile, QM and levels, sharpness, screen-content detection, AC bias, maximum transform size, independent U/V quantizer deltas | zenavif SVT backend, speed 6, PSNR tune, 8-bit 4:2:0, one thread, default expert settings |
 | `zenjxl` | native distance, effort, gaborish, EPF, resampling, noise synthesis, faster decoding, initial AC quantization, transform information-loss weight, CfL two-pass, chromacity adjustment, small transforms | native quality-to-distance mapping, effort 7, one thread, default filters/quantization |
+| `zenjpegai` | trained model ID, quantizer displacement, residual-variance scaling, channel gain, latent scaling | model 1, no extra tools, rate displacement spanning low to high bitrates |
+| `zencoolchic` | native lambda, iteration budget, coded architecture, seed, RDOQ | 2000 training iterations, high architecture, seed 0, RDOQ on |
+
+JPEG AI is stored with the `jaic` bitstream FourCC, Cool-chic with `cool`.
+These identify the encoded syntax; the recipe pins the encoder implementation.
+JPEG AI model weights are separate data and must be retained with their own
+provenance for a fully reproducible run. Its quality-to-displacement mapping is
+uncalibrated. Cool-chic trains a model per image; 2000 iterations is its minimum
+and a sample can take substantial time. Its quality-to-lambda mapping is also
+uncalibrated. Run a small render
+before a broad search and keep the honest baseline from the same family.
 
 The JXL baseline clamps quality to 1–99 to stay on the lossy path. SVT accepts
 1–100. Neither claims that a quality number means the same thing across codecs.

@@ -88,5 +88,9 @@ pub(crate) fn decode_jpeg(jpeg: &[u8], reference: &Rgb8Image) -> Res<Rgb8Image> 
 
 #[cfg(feature = "possession-svt")]
 pub(crate) mod zenav1_svt;
+#[cfg(feature = "possession-coolchic")]
+pub(crate) mod zencoolchic;
+#[cfg(feature = "possession-jpegai")]
+pub(crate) mod zenjpegai;
 #[cfg(feature = "possession-jxl")]
 pub(crate) mod zenjxl;

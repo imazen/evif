@@ -92,7 +92,14 @@ possession-check:
     {{heavy}} cargo clippy --release -p evif-probe --features possession --all-targets -- -D warnings
 
 possession-test:
-    {{heavy}} cargo test --release -p evif-probe --features possession --test possession -- --test-threads=1
+    {{heavy}} cargo test --release -p evif-probe --features possession --test possession --test ai_possession --test registry_injection -- --test-threads=1
+
+ai-possession-check:
+    cargo fmt -p evif-probe --check
+    {{heavy}} cargo check -p evif-probe --features possession-jpegai,possession-coolchic
+
+ai-possession-test:
+    {{heavy}} cargo test -p evif-probe --features possession-jpegai,possession-coolchic --test registry_injection --test ai_possession -- --test-threads=1
 
 shared-pages-check:
     {{heavy}} cargo test --release -p evif --test wire

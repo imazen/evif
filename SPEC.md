@@ -336,6 +336,15 @@ candidate. `evif` means EVIF-specific coding, not a nested EVIF container. Codec
 identifiers are never filesystem paths. Encoded bytes must be nonempty. BITS is
 optional and cannot substitute for a rendition.
 
+Codec FourCCs identify the actual encoded syntax, not the encoder implementation:
+`jpeg` for JPEG, `png ` for PNG, `avif` for AVIF, `jxl ` for JPEG XL,
+`jaic` for a JPEG AI codestream and `cool` for a Cool-chic stream. The recipe
+records the encoder implementation and revision separately. Structural tags
+remain role-neutral: `ASST` describes either media asset, `SEGM` describes
+its frame range, and the evaluation's `reference`/`candidate` fields assign
+roles. This permits the same asset to be a reference in one score and a
+candidate in another without rewriting media bytes.
+
 Recorded size/checksum after byte omission, encoder/decoder versions, seeds,
 source labels and recipes may use ancillary application-owned JSON (`meta`, for
 example). Label recorded size separately from measured embedded BITS size. Never

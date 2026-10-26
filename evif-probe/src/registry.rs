@@ -27,6 +27,10 @@ impl Registry {
         r.add_family("zenav1-svt", || Box::new(family::zenav1_svt::Zenav1Svt));
         #[cfg(feature = "possession-jxl")]
         r.add_family("zenjxl", || Box::new(family::zenjxl::Zenjxl));
+        #[cfg(feature = "possession-jpegai")]
+        r.add_family("zenjpegai", || Box::new(family::zenjpegai::Zenjpegai));
+        #[cfg(feature = "possession-coolchic")]
+        r.add_family("zencoolchic", || Box::new(family::zencoolchic::Zencoolchic));
         r.add_rendition_codec(RenditionFormat::Png, || Box::new(rendition::Png));
         r.add_family("zenjpeg-expert", || {
             Box::new(family::zenjpeg_expert::ZenjpegExpert)

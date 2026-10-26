@@ -5,6 +5,12 @@ several assets. Store the pristine reference first; encode each distorted image
 with an explicit earlier reference page. IMIJ chooses prediction only when it
 saves bytes. It preserves the distorted samples exactly, including HDR float bits.
 
+For a reference/candidate pair EVIF writes **two `SEGM` records and one `IMIJ`
+payload**. The first segment owns the self-contained bundle; the second selects
+its distorted page through `shared-pages` and has no following payload. All IMI
+prediction dependencies are pages inside that one bundle. An external EVIF
+carrier URI is a storage location, never an IMI prediction reference.
+
 `embedded-pages` owns the payload and selects its reference window.
 `shared-pages` addresses that earlier owner and selects a candidate window.
 Prediction dependencies are internal to IMIJ. The EVIF parser follows one backward

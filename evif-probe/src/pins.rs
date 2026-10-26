@@ -62,3 +62,13 @@ pub(crate) const ZENJXL: Pin = Pin {
     version: "0.3.0",
     commit: "3f5e22e9cf8e2d58311af183d3f20454deeae6be",
 };
+#[cfg(feature = "possession-jpegai")]
+pub(crate) const ZENJPEGAI: Pin = Pin {
+    version: "0.0.1",
+    commit: "1192fca6b6c2fdc4dcf29a6c8064c53a987caf59",
+};
+#[cfg(feature = "possession-coolchic")]
+pub(crate) const ZENCOOLCHIC: Pin = Pin {
+    version: "0.0.1",
+    commit: "1cecd62037dd8a8fe14a8a46d872ae7165538b33",
+};

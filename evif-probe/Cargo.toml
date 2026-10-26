@@ -15,14 +15,20 @@ path = "src/main.rs"
 [features]
 default = []
 # Larger experimental codec dependencies; the container remains unchanged.
-possession = ["possession-svt", "possession-jxl"]
+possession = ["possession-svt", "possession-jxl", "possession-jpegai", "possession-coolchic"]
 possession-svt = ["dep:zenavif", "dep:almost-enough"]
 possession-jxl = ["dep:zenjxl"]
+possession-jpegai = ["dep:zenjpegai"]
+possession-coolchic = ["dep:zencoolchic", "dep:zenpixels"]
 
 [dependencies]
 almost-enough = { version = "0.4.5", optional = true }
 zenavif = { git = "https://github.com/imazen/zenavif", rev = "a7638f6e0655914fb15fe4633ac26425533756c8", default-features = false, features = ["zenav1-svt", "__expert"], optional = true }
 zenjxl = { git = "https://github.com/imazen/zenjxl", rev = "3f5e22e9cf8e2d58311af183d3f20454deeae6be", default-features = false, features = ["encode", "decode", "__expert"], optional = true }
+zenjpegai = { git = "https://github.com/imazen/zenjpegai", rev = "1192fca6b6c2fdc4dcf29a6c8064c53a987caf59", default-features = false, features = ["std", "pth"], optional = true }
+zencoolchic = { git = "https://github.com/imazen/zencoolchic", rev = "1cecd62037dd8a8fe14a8a46d872ae7165538b33", default-features = false, features = ["encoder", "zencodec"], optional = true }
+zencodec = { version = "0.1.26", default-features = false }
+zenpixels = { version = "0.2.16", default-features = false, optional = true }
 evif = { path = "../evif" }
 # Codecs and metrics are pinned to main revisions; `src/pins.rs` records the
 # same revisions for the `scor` and `knob` chunks. Update both together.
@@ -49,5 +55,3 @@ zenhash = { git = "https://github.com/imazen/zenhash", rev = "7774776d2eb7b27da0
 unsafe_code = "forbid"
 
 [dev-dependencies]
-# Exercise sequence carriers through the same trait revision as pinned zenpng.
-zencodec = { git = "https://github.com/imazen/zencodec", rev = "d327434b0826a3e39633665c76f5081c0ceb34cc", default-features = false }
