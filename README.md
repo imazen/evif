@@ -2,14 +2,21 @@
 
 <p align="center"><img src="site/evif-banner.webp" width="960" alt="EVIF — the evil image format. A violet ghost-file with glowing green eyes floats over scattered pixels."></p>
 
-**Find the images your quality metric gets wrong.**
+**AI codecs and AI codec optimizers will find novel blind spots in image quality
+metrics. Let's find and fix them first.**
 
-EVIF is a container and a probe for stress-testing image quality metrics such as
-SSIMULACRA2, butteraugli and zensim. An `.evif` file holds a distorted image made by
-pushing a real encoder's knobs where no sane encoder goes, the exact recipe, one
-lossless reference decode, and the score every metric gave it. The original
-encoded bytes can be retained or omitted with their size and checksum recorded.
-Anyone can re-run the metrics and check the recorded scores.
+EVIF probes encoder settings and distortions for disagreements between IQA metrics,
+then packages the findings so people and new metrics can examine the same samples.
+The goal is to expose weaknesses before optimization learns to exploit them.
+Disagreement identifies a case to investigate; human review determines which metric
+needs fixing.
+
+An `.evif` file can store **a lossless PNG or IMIJ rendition of the distorted
+encode's decoded pixels**, together with its recipe and scores. “Lossless” describes
+how those already-distorted pixels are stored; it does not undo the distortion.
+The original JPEG, AV1 or JPEG XL bytes are optional: keep them for decoder replay,
+or omit them while retaining their encoded size and checksum. You do not need both
+PNG and IMIJ copies of the same samples.
 
 The new [major-1 wire format](SPEC.md) stores reference and candidate with identical
 SDR/HDR still/video asset records, optional original bytes, and appendable scoring
@@ -24,29 +31,21 @@ algorithm IDs and variable-length digests so future hashes fit the same grammar.
 The Rust implementation uses our [zenhash](https://github.com/imazen/zenhash)
 crate; see the [hash selection evidence](benchmarks/hash-portability-2026-10-25.md).
 
-It is built for perceptual-metric research: finding the encodes a metric gets wrong,
-so the metric can be fixed before an encoder is tuned against it.
+## Why search beyond fixed datasets
 
-## Why another IQA dataset
+Fixed datasets test a metric on a known set of distortions. AI codecs and codec
+optimizers search for new ways to improve their objective, including changes a
+metric rewards more than a viewer would. EVIF searches across encoder controls and
+synthetic distortions, retaining the recipe, exact decoded pixels and measured
+encoded cost when a real bitstream exists. Synthetic costs are labeled separately.
 
-Fixed datasets (KADID-10k, TID2013, KADIS-700k) measure whether a metric ranks common
-distortions the way people do. They say nothing about what an optimizer finds when it
-pushes against the metric, and that is how metrics are actually used: inside encoder
-tuning, rate-distortion search and codec pickers. A metric with 0.95 SROCC on KADID
-can still have a cheap exploit, and an encoder tuned against it will find that exploit.
-
-Maximum-differentiation competition (Wang & Simoncelli, 2008; gMAD, Ma et al., 2016)
-answers this by holding one metric's score fixed and pushing another as far as it
-will go, then asking a person which metric was right. EVIF runs that search over
-codec parameters instead of pixel gradients, so every finding is a bitstream a real
-decoder reads and a file size that is real. Pixel-space attacks produce noise no
-encoder would emit; a quantization table a metric overrates is one an encoder can
-actually ship.
+A finding can be rescored with an unseen metric without repeating the original
+search. Keep common failure modes near the front of the search and retain a long
+tail of unusual but relevant distortions: tomorrow's optimizer may find them.
 
 ## How the probe works
 
-For each reference image and one *stress family* (a codec with its full parameter
-vector exposed):
+For each reference image and one *stress family* (a codec with exposed encoder controls):
 
 1. **Honest curve.** The family's default encoder is swept over quality to give a
    rate-distortion curve for every score key.
@@ -102,8 +101,8 @@ target/release/evif render --family zenjpeg-expert --out out/honest \
   gain_vs_baseline: {"ssim2":-0.897,"zensim":-0.751,"butteraugli":-1.090, ...}
 ```
 
-`extract` writes the retained candidate bytes, the stored PNG/IMIJ reference
-decode, and scores as JSON. Colliding codec/rendition extensions use a separate
+`extract` writes the retained candidate bytes, the stored PNG/IMIJ rendition of the distorted
+candidate, and scores as JSON. Colliding codec/rendition extensions use a separate
 `bitstreams/` directory. `--format native` extracts only the original candidate;
 it fails if those bytes were omitted. EVIF-specific candidate streams use the
 `.evifbits` extension to distinguish them from complete `.evif` containers.
@@ -115,16 +114,16 @@ it fails if those bytes were omitted. EVIF-specific candidate streams use the
 | `HEAD` | dimensions, channel layout, sample type |
 | `BITS` | optional candidate bytes: an external codec or EVIF-specific compression |
 | `BINF` | recorded candidate codec, encoded size and checksum when bytes are omitted |
-| `PNGF` **or** `IMIJ` | one lossless reference decode: the exact pixels the metrics scored |
+| `PNGF` **or** `IMIJ` | one lossless rendition of the distorted candidate: the exact pixels scored |
 | `DIGS` | digests of the scored and source rasters |
 | `clam` | explicitly synthetic claimed cost, when no encoded cost exists |
 | `srce` `knob` `scor` | source, recipe and versioned scores |
 | `SEAL` | checksum of the preceding file bytes |
 
 PNG and IMIJ are alternatives; a file stores exactly one. Viewers show
-that reference decode because candidate decoders can differ in IDCT, chroma
+that frozen candidate rendition because candidate decoders can differ in IDCT, chroma
 upsampling or film grain. EVIF-specific compression goes in `BITS`, not in the
-reference decode. Legacy `PIXL` files remain readable. See [SPEC.md](SPEC.md).
+rendition. Legacy `PIXL` files remain readable. See [SPEC.md](SPEC.md).
 
 ### Storage and output choices
 
@@ -132,9 +131,12 @@ reference decode. Legacy `PIXL` files remain readable. See [SPEC.md](SPEC.md).
 # One PNG rendition per candidate, without a second file of original codec bytes.
 evif render --family zenjpeg-expert --qualities 20,60,90 --out out/png \
     --format png --omit-bits input.png
-# Complete containers with PNGF reference decodes and recorded candidate costs.
+# Complete containers with PNGF candidate renditions and recorded codec costs.
 evif render --family zenjpeg-expert --qualities 20,60,90 --out out/evif \
     --format evif --rendition png --omit-bits input.png
+# The IMIJ-enabled companion stores the same distorted candidate pixels in IMIJ.
+evif-private render --family zenjpeg-expert --qualities 20,60,90 --out out/imij \
+    --format evif --rendition imij --omit-bits input.png
 # Remove BITS from an existing file while preserving recipe, scores and provenance.
 evif repack input.evif compact.evif --omit-bits
 # Export only the retained original codec file.
@@ -147,7 +149,7 @@ provides PNG; a companion registers the IMIJ encoder/decoder through
 `Registry::add_rendition_codec`. The container library can preserve and extract
 IMIJ bytes without that plugin. Native output needs actual candidate bytes.
 
-Existing defaults retain candidate bytes and use PNG reference decodes.
+Existing defaults retain candidate bytes and use PNG candidate renditions.
 `render.tsv` keeps its original first six columns and appends output format/path,
 candidate codec/checksum, and retained bitstream path. An empty `png` column
 means the selected output is not PNG. Candidate bpp counts the candidate codec,

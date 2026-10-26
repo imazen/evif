@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>EVIF, the evil image format</title>
-<meta name="description" content="Find quality metrics’ weak spots. EVIF packages exact SDR/HDR image and video samples, reproduction details, and appendable evaluations.">
+<meta name="description" content="Find novel IQA blind spots before AI codec optimizers do. EVIF packages exact SDR/HDR image and video samples, reproduction details, and appendable evaluations.">
 <link rel="icon" href="logo.svg" type="image/svg+xml">
 <style>
   :root {
@@ -91,13 +91,14 @@
     <div class="hero-copy">
       <p class="eyebrow">Perceptual-metric research</p>
       <h1>EVIF<span>The evil image format.</span></h1>
-      <p class="tagline">Find the images your quality metric gets wrong.</p>
+      <p class="tagline">Find metric blind spots before AI codec optimizers do.</p>
       <a class="button" href="#get-it">Open the coffin <span aria-hidden="true">&nbsp;↓</span></a>
     </div>
   </header>
 
   <p class="lead">
-    Find weak spots in quality metrics, including ones you have never tested before.
+    AI codecs and AI codec optimizers will find novel blind spots in image quality metrics.
+    Let’s find and fix them first, including in metrics we have never tested before.
     The probe searches encoder settings and distortions for disagreements between metrics.
     The container keeps exact reference and candidate samples, their interpretation and timing,
     and evaluations you can reproduce or extend. Images and video. SDR and HDR.
@@ -109,7 +110,7 @@
   <h2>Why</h2>
   <p>
     Fixed datasets such as KADID-10k and TID2013 show whether a metric ranks everyday distortions
-    the way people do. They cannot show what an optimizer finds when it pushes against the metric,
+    the way people do. They cover a known set of distortions. Optimizers search for new ways to improve their objective,
     and that is how metrics are used: inside encoder tuning, rate-distortion search and codec pickers.
     EVIF searches for metric disagreement across encoder settings and synthetic distortions.
     Codec experiments retain measured encoded cost; synthetic experiments record their assumed cost
@@ -117,7 +118,7 @@
   </p>
 
   <div class="grid">
-    <div class="card"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M7 5h12l6 6v17H7zM19 5v7h6M11 17h2m5 0h2M12 22h7"/><path d="m3 11-2 2 2 2m26 4 2 2-2 2"/></svg><h3>Possess</h3><p>Take a real encoder's full parameter vector: per-band quantization, zero-bias, chroma subsampling, adaptive quantization, deringing, trellis.</p></div>
+    <div class="card"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M7 5h12l6 6v17H7zM19 5v7h6M11 17h2m5 0h2M12 22h7"/><path d="m3 11-2 2 2 2m26 4 2 2-2 2"/></svg><h3>Possess</h3><p>Push a real encoder's exposed controls: per-band quantization, zero-bias, chroma subsampling, adaptive quantization, deringing, trellis.</p></div>
     <div class="card"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 5v22M10 28h12M5 10h22M8 10l-5 9h10zm16 0-5 9h10z"/><circle cx="16" cy="6" r="2"/></svg><h3>Judge</h3><p>Score every sample with several metrics, each pinned to a revision, against the family's honest rate-distortion curve at the same bits per pixel.</p></div>
     <div class="card"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M7 4h12l6 6v18H7zM19 4v7h6M11 15h10M11 19h5"/><path d="m16 24 2 2 4-4"/></svg><h3>Record</h3><p>Freeze the samples and retain the recipe. Major 1 gives reference and candidate the same payload semantics, with optional original codec bytes. Append new evaluations as metrics evolve.</p></div>
   </div>
@@ -143,6 +144,10 @@
   <p style="margin-top:20px">An evaluation assigns the roles. Each asset needs only one resolved SDR
     or HDR rendition. Gain maps and duplicate SDR/HDR copies are not required. PNG stores integer
     stills, APNG stores integer sequences, and lossless IMI carries integer or float frames.</p>
+  <p><strong>IMIJ can store the distorted encode’s decoded pixels.</strong> Lossless storage preserves
+    that distortion exactly; it does not restore the pristine source. Either asset can use PNG/APNG
+    or IMIJ. Keep the original codec bytes for decoder replay, or omit them and retain their size
+    and checksum. One rendition per asset is sufficient.</p>
   <p>Color primaries, transfer function, signal units, pixel aspect, frame durations and looping
     belong to the media. Viewing conditions, metric versions, preparation steps and results belong
     to adapter-owned evaluation JSON. PQ, HLG and relative or absolute linear light have explicit
