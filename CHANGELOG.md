@@ -87,6 +87,8 @@ All notable changes to this repository. Format: [Keep a Changelog](https://keepa
   append explicit format, path and provenance columns (`b2597dcc`).
 
 ### Fixed
+- JPEG AI recipes bind the selected model's six checkpoint files with a
+  SHA-256 fingerprint and reject changed weights on replay (`da5c4f1c`).
 - Extraction refuses existing score files; render rejects legacy ledgers before
   appending incompatible columns (`57ba3891`).
 - PNG extraction preserves the interior bitstream under `bitstreams/` alongside

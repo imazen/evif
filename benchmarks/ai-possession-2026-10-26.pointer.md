@@ -42,6 +42,7 @@ profile it ran for 189.80 s; the run-heavy wrapper reported `rc=0`, 267 s
 total, peak RSS 0.91 GiB and minimum available memory 26,387 MiB. This is a
 functional diagnostic on a shared machine, not a throughput result.
 
-No checkpoint or test bitstream is committed. The later recipe revision binds
+No checkpoint or test bitstream is committed. The later recipe revision
+`da5c4f1c` binds
 a SHA-256 digest of these six named checkpoint files in addition to the code
 revision and model ID. Preserve exact model bytes for reproducible replay.
