@@ -23,3 +23,6 @@ zenpixels = { git = "https://github.com/imazen/zenpixels", rev = "1d3ddd2131b22e
 zenpixels-convert = { git = "https://github.com/imazen/zenpixels", rev = "1d3ddd2131b22e9e3754c765d4ce45ce3901de59" }
 zencodec = { git = "https://github.com/imazen/zencodec", rev = "d327434b0826a3e39633665c76f5081c0ceb34cc" }
 zenanalyze = { git = "https://github.com/imazen/zenanalyze", rev = "8ca647c525cf488c61bbf35475ca8ba3db6b628e" }
+
+jxl-encoder = { git = "https://github.com/imazen/jxl-encoder", rev = "ce4ec7a8e4bf4a74a0b55a1851bc5b2b84167640" }
+zenjxl-decoder = { git = "https://github.com/imazen/zenjxl-decoder", rev = "21159c6ba149bc802f0d985851e568976a44da04" }

@@ -31,6 +31,8 @@ All notable changes to this repository. Format: [Keep a Changelog](https://keepa
 ## Workspace
 
 ### Added
+- Opt-in zenav1-svt and JPEG XL possession families with pinned codec replay,
+  decoded candidate renditions, prioritized stress axes and a combination tail.
 - Isolated Rust hash comparison tool, pinned implementations, streaming controls
   and measured single-thread costs; no wire algorithm change (`2e6ecfbe`).
 - Resolved SDR/HDR rendition design profile with exact frame timing, explicit

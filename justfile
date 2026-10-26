@@ -85,3 +85,11 @@ hash-cost-check:
 
 hash-quality-controls:
     {{heavy}} cargo run --release --manifest-path tools/hash-cost/Cargo.toml --bin quality-controls
+
+# Opt-in real codec possession; serial tests keep codec memory bounded.
+possession-check:
+    cargo fmt -p evif-probe --check
+    {{heavy}} cargo clippy --release -p evif-probe --features possession --all-targets -- -D warnings
+
+possession-test:
+    {{heavy}} cargo test --release -p evif-probe --features possession --test possession -- --test-threads=1

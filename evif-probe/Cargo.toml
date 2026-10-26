@@ -12,7 +12,17 @@ publish = false
 name = "evif"
 path = "src/main.rs"
 
+[features]
+default = []
+# Larger experimental codec dependencies; the container remains unchanged.
+possession = ["possession-svt", "possession-jxl"]
+possession-svt = ["dep:zenavif", "dep:almost-enough"]
+possession-jxl = ["dep:zenjxl"]
+
 [dependencies]
+almost-enough = { version = "0.4.5", optional = true }
+zenavif = { git = "https://github.com/imazen/zenavif", rev = "a7638f6e0655914fb15fe4633ac26425533756c8", default-features = false, features = ["zenav1-svt", "__expert"], optional = true }
+zenjxl = { git = "https://github.com/imazen/zenjxl", rev = "3f5e22e9cf8e2d58311af183d3f20454deeae6be", default-features = false, features = ["encode", "decode", "__expert"], optional = true }
 evif = { path = "../evif" }
 # Codecs and metrics are pinned to main revisions; `src/pins.rs` records the
 # same revisions for the `scor` and `knob` chunks. Update both together.

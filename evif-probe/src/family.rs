@@ -85,3 +85,8 @@ pub(crate) fn decode_jpeg(jpeg: &[u8], reference: &Rgb8Image) -> Res<Rgb8Image> 
     }
     Rgb8Image::new(w, h, px.to_vec())
 }
+
+#[cfg(feature = "possession-svt")]
+pub(crate) mod zenav1_svt;
+#[cfg(feature = "possession-jxl")]
+pub(crate) mod zenjxl;

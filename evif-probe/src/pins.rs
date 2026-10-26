@@ -51,3 +51,14 @@ pub const ZENQUANT: Pin = Pin {
     version: "0.1.3",
     commit: REGISTRY,
 };
+
+#[cfg(feature = "possession-svt")]
+pub(crate) const ZENAVIF_SVT: Pin = Pin {
+    version: "0.2.0",
+    commit: "a7638f6e0655914fb15fe4633ac26425533756c8",
+};
+#[cfg(feature = "possession-jxl")]
+pub(crate) const ZENJXL: Pin = Pin {
+    version: "0.3.0",
+    commit: "3f5e22e9cf8e2d58311af183d3f20454deeae6be",
+};
