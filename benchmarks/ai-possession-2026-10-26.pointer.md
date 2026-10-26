@@ -30,12 +30,18 @@ model beta 0.012, base operating point. Their SHA-256 digests, relative to its
 25d146d99f4054b484c81ac50663cef95d11097b2e0be2d4c2c837214f6fe78d  VM_bop/decoder_UV_0.012.pth
 ```
 
+The later recipe's six-file SHA-256 digest is
+`cdc1850088c6517759ecb1cf33c8deb285b8fb8be11fdbceb814c233b1598fc3`.
+It hashes a domain label, each relative path length and path, each file length,
+and each file's bytes in the order above. An independent Python `hashlib`
+calculation agreed with the Rust recipe.
+
 The Cool-chic 8×8 RGB8 test wrote `cool` native bytes; a second decode equaled
 the scored pixels. The test passed with zero ignored. In the unoptimized test
 profile it ran for 189.80 s; the run-heavy wrapper reported `rc=0`, 267 s
 total, peak RSS 0.91 GiB and minimum available memory 26,387 MiB. This is a
 functional diagnostic on a shared machine, not a throughput result.
 
-No checkpoint or test bitstream is committed. The JPEG AI recipe currently pins
-the code revision and model ID, while the checkpoint hashes above are external
-provenance. Preserve exact model bytes for reproducible replay.
+No checkpoint or test bitstream is committed. The later recipe revision binds
+a SHA-256 digest of these six named checkpoint files in addition to the code
+revision and model ID. Preserve exact model bytes for reproducible replay.

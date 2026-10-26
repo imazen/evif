@@ -53,9 +53,12 @@ fn jpegai_native_bytes_decode_to_scored_pixels() {
     )
     .unwrap();
     let family = Registry::builtin().family("zenjpegai").unwrap();
-    let result = family
-        .encode(&family.baseline(50.0).unwrap(), &source)
-        .unwrap();
+    let params = family.baseline(50.0).unwrap();
+    assert_eq!(params["model_sha256"].as_str().unwrap().len(), 64);
+    let result = family.encode(&params, &source).unwrap();
+    let mut wrong_model = params;
+    wrong_model["model_sha256"] = serde_json::json!("0".repeat(64));
+    assert!(family.encode(&wrong_model, &source).is_err());
     let bits = result.bits.unwrap();
     assert_eq!(bits.codec, *b"jaic");
     assert!(bits.data.starts_with(&[0xff, 0x80, 0xff, 0x82]));

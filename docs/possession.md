@@ -35,9 +35,11 @@ includes the complete AVIF file or JXL codestream. This is not an HDR/video prob
 
 JPEG AI is stored with the `jaic` bitstream FourCC, Cool-chic with `cool`.
 These identify the encoded syntax; the recipe pins the encoder implementation.
-JPEG AI model weights are separate data and must be retained with their own
-provenance for a fully reproducible run. Its quality-to-displacement mapping is
-uncalibrated. Cool-chic trains a model per image; 2000 iterations is its minimum
+JPEG AI model weights are separate data. Each recipe records a SHA-256 digest
+of the six checkpoints its selected model uses; replay refuses changed weights.
+Retain the external files for a fully reproducible run. Its
+quality-to-displacement mapping is uncalibrated. Cool-chic trains a model per
+image; 2000 iterations is its minimum
 and a sample can take substantial time. Its quality-to-lambda mapping is also
 uncalibrated. Run a small render before a broad search and keep the honest
 baseline from the same family.
