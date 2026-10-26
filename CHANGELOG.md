@@ -53,6 +53,8 @@ All notable changes to this repository. Format: [Keep a Changelog](https://keepa
   `2f177da1`). These do not enable EVIF video output.
 
 ### Changed
+- CI enables the codec-possession features explicitly; the JPEG AI checkpoint
+  test remains an opt-in run requiring upstream model files.
 - Website and README use haunted-file artwork, with a responsive violet and lime
   theme and matching SVG icons (`486fee4e`).
 
