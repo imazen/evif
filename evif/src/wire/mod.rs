@@ -121,6 +121,8 @@ pub struct Ancillary {
 pub struct Index {
     pub assets: BTreeMap<u32, Asset>,
     pub segments: Vec<IndexedSegment>,
+    /// Original encoded-object descriptors, including objects whose bytes were omitted.
+    pub bitstream_info: BTreeMap<u32, BitstreamInfo>,
     pub bitstreams: Vec<IndexedBits>,
     pub roots: Vec<MediaRoot>,
     pub scores: Vec<ScoreRecord>,
@@ -154,6 +156,7 @@ impl State {
             index: Index {
                 assets: BTreeMap::new(),
                 segments: Vec::new(),
+                bitstream_info: BTreeMap::new(),
                 bitstreams: Vec::new(),
                 roots: Vec::new(),
                 scores: Vec::new(),
@@ -197,7 +200,7 @@ impl State {
         }
         if matches!(
             &tag,
-            b"ASST" | b"SEGM" | b"PNGF" | b"IMIJ" | b"BITS" | b"MEND"
+            b"ASST" | b"SEGM" | b"PNGF" | b"IMIJ" | b"BINF" | b"BITS" | b"MEND"
         ) {
             check(!self.ended, "media record after MEND")?;
         } else if tag == *b"scor" {
@@ -220,6 +223,19 @@ impl State {
     }
     fn json(&mut self, tag: [u8; 4], body: &[u8]) -> Result<(), Error> {
         match &tag {
+            b"BINF" => {
+                let info: BitstreamInfo = decode_json(body)?;
+                info.validate()?;
+                check(
+                    self.index.assets.contains_key(&info.asset),
+                    "BINF asset missing",
+                )?;
+                check(
+                    !self.index.bitstream_info.contains_key(&info.asset),
+                    "duplicate BINF for asset",
+                )?;
+                self.index.bitstream_info.insert(info.asset, info);
+            }
             b"ASST" => {
                 let asset: Asset = decode_json(body)?;
                 asset.validate()?;
@@ -444,7 +460,7 @@ impl State {
         self.commit_segment(segment, Some(span));
         Ok(())
     }
-    fn bits(&mut self, prefix: &[u8], span: Span) -> Result<(), Error> {
+    fn bits(&mut self, prefix: &[u8], span: Span, actual: Hash) -> Result<(), Error> {
         check(
             prefix.len() == 8 && span.length > 8,
             "BITS needs asset, codec and bytes",
@@ -455,6 +471,25 @@ impl State {
             .get_mut(&asset)
             .ok_or(Error::Invalid("BITS asset missing"))?;
         check(!p.bits, "duplicate BITS for asset")?;
+        let info = self
+            .index
+            .bitstream_info
+            .get(&asset)
+            .ok_or(Error::Invalid("BITS requires preceding BINF"))?;
+        check(
+            info.codec.as_bytes() == &prefix[4..8],
+            "BITS codec differs from BINF",
+        )?;
+        check(
+            info.bytes.0 == span.length - 8,
+            "BITS length differs from BINF",
+        )?;
+        let expected = info
+            .hash
+            .as_ref()
+            .ok_or(Error::Invalid("embedded BITS requires a hash"))?;
+        expected.require_sha256()?;
+        check(expected == &actual, "BITS SHA-256 mismatch")?;
         p.bits = true;
         self.index.bitstreams.push(IndexedBits {
             asset,
@@ -495,7 +530,7 @@ impl State {
 }
 
 fn is_json(tag: [u8; 4]) -> bool {
-    matches!(&tag, b"ASST" | b"SEGM" | b"MEND" | b"scor")
+    matches!(&tag, b"ASST" | b"SEGM" | b"BINF" | b"MEND" | b"scor")
 }
 fn file_header(bytes: &[u8]) -> Result<(), Error> {
     check(
@@ -557,7 +592,11 @@ pub fn scan(bytes: &[u8], limits: Limits) -> Result<Index, Error> {
             let hash = state.expected_payload_hash().map(|_| Hash::of(body));
             state.payload(span, hash)?;
         } else if tag == *b"BITS" {
-            state.bits(body.get(..8).ok_or(Error::Invalid("short BITS"))?, span)?;
+            state.bits(
+                body.get(..8).ok_or(Error::Invalid("short BITS"))?,
+                span,
+                Hash::of(&body[8..]),
+            )?;
         } else {
             state.index.ancillary.push(Ancillary { tag, payload: span });
         }

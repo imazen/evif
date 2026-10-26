@@ -10,6 +10,89 @@ use super::{Error, check};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct U64(pub u64);
 
+/// Whether the encoded syntax declares a version, defines none, or is unknown.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+pub enum SyntaxVersion {
+    Declared { value: String },
+    Unversioned,
+    Unknown,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SyntaxVersionFields {
+    kind: String,
+    value: Option<String>,
+}
+impl<'de> Deserialize<'de> for SyntaxVersion {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let fields = SyntaxVersionFields::deserialize(d)?;
+        match (fields.kind.as_str(), fields.value) {
+            ("declared", Some(value)) => Ok(Self::Declared { value }),
+            ("unversioned", None) => Ok(Self::Unversioned),
+            ("unknown", None) => Ok(Self::Unknown),
+            _ => Err(de::Error::custom("invalid encoded syntax version state")),
+        }
+    }
+}
+
+/// Description of an original encoded object, retained even when BITS is omitted.
+/// `format` identifies the decoding syntax; `version` describes the syntax, not
+/// the version of the encoder that produced the object. Decoder-specific syntax
+/// switches belong in `parameters`, so no magic-byte sniffing is required.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BitstreamInfo {
+    pub asset: u32,
+    /// Exactly four printable ASCII bytes, including any trailing space.
+    pub codec: String,
+    /// Stable media type or URI identifying the encoded syntax.
+    pub format: String,
+    pub version: SyntaxVersion,
+    pub profile: Option<String>,
+    pub level: Option<String>,
+    /// Format-specific parameters required to interpret or reproduce the stream.
+    pub parameters: serde_json::Value,
+    /// Original encoded byte count, whether or not BITS is retained.
+    pub bytes: U64,
+    /// Optional when BITS is omitted; SHA-256 required when BITS is embedded.
+    pub hash: Option<Hash>,
+}
+impl BitstreamInfo {
+    pub fn validate(&self) -> Result<(), Error> {
+        check(self.asset != 0, "bitstream asset ID zero")?;
+        check(
+            self.codec.len() == 4 && self.codec.bytes().all(|b| (0x20..=0x7e).contains(&b)),
+            "codec must be four printable ASCII bytes",
+        )?;
+        check(
+            !self.format.is_empty()
+                && self.format.len() <= 256
+                && self.format.bytes().all(|b| (0x21..=0x7e).contains(&b)),
+            "invalid encoded format identifier",
+        )?;
+        if let SyntaxVersion::Declared { value } = &self.version {
+            check(
+                !value.is_empty() && value.len() <= 128 && !value.chars().any(char::is_control),
+                "invalid encoded syntax version",
+            )?;
+        }
+        for value in [&self.profile, &self.level].into_iter().flatten() {
+            check(
+                !value.is_empty() && value.len() <= 128 && !value.chars().any(char::is_control),
+                "invalid encoded syntax qualifier",
+            )?;
+        }
+        check(
+            self.parameters.is_object(),
+            "format parameters must be an object",
+        )?;
+        check(self.bytes.0 > 0, "empty original encoded object")?;
+        Ok(())
+    }
+}
+
 impl Serialize for U64 {
     fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
         s.collect_str(&self.0)

@@ -351,6 +351,18 @@ fn file() -> (Vec<u8>, Index) {
         )
         .unwrap();
     }
+    w.bitstream_info(&BitstreamInfo {
+        asset: 1,
+        codec: "evif".into(),
+        format: "urn:imazen:evif-bits:1".into(),
+        version: SyntaxVersion::Declared { value: "1".into() },
+        profile: None,
+        level: None,
+        parameters: serde_json::json!({"prediction":"none"}),
+        bytes: U64(7),
+        hash: Some(Hash::of(b"encoded")),
+    })
+    .unwrap();
     w.bitstream(1, *b"evif", &mut &b"encoded"[..], 7).unwrap();
     w.record(*b"note", br#"{"caption":"editable"}"#).unwrap();
     w.finish_media().unwrap();
@@ -372,6 +384,10 @@ fn symmetric_assets_stream_and_slice_have_identical_semantics() {
         assert_eq!(index.roots, expected.roots);
         assert_eq!(index.roots[0].hash, index.roots[1].hash); // local IDs/roles not hashed
         assert_eq!(index.bitstreams[0].codec, *b"evif");
+        assert_eq!(
+            index.bitstream_info[&1].version,
+            SyntaxVersion::Declared { value: "1".into() }
+        );
         let span = index.bitstreams[0].payload;
         assert_eq!(
             &bytes[span.offset as usize..(span.offset + span.length) as usize],
@@ -380,6 +396,80 @@ fn symmetric_assets_stream_and_slice_have_identical_semantics() {
         assert_eq!(index.ancillary[0].tag, *b"note");
     }
     assert!(evif::Evif::from_bytes(&bytes).is_err());
+}
+
+#[test]
+fn encoded_format_survives_omitted_bytes_and_embedded_bytes_are_verified() {
+    assert!(
+        serde_json::from_str::<SyntaxVersion>(r#"{"kind":"unversioned","value":"2"}"#).is_err()
+    );
+    assert!(serde_json::from_str::<SyntaxVersion>(r#"{"kind":"future"}"#).is_err());
+    let mut w = Writer::new(Vec::new(), Limits::default()).unwrap();
+    let a = asset(1, Kind::Sequence);
+    let payload = b"carrier";
+    w.asset(&a).unwrap();
+    w.segment(
+        &segment(&a, payload),
+        &mut &payload[..],
+        payload.len() as u64,
+    )
+    .unwrap();
+    let info = BitstreamInfo {
+        asset: 1,
+        codec: "cool".into(),
+        format: "urn:imazen:cool-chic-codestream".into(),
+        version: SyntaxVersion::Unversioned,
+        profile: Some("low-latency".into()),
+        level: None,
+        parameters: serde_json::json!({"model":"checkpoint-7","decoder_mode":2}),
+        bytes: U64(3),
+        hash: Some(Hash::of(b"abc")),
+    };
+    w.bitstream_info(&info).unwrap();
+    w.finish_media().unwrap();
+    let (omitted, _) = w.finish().unwrap();
+    let index = scan(&omitted, Limits::default()).unwrap();
+    assert_eq!(index.bitstream_info[&1], info);
+    assert!(index.bitstreams.is_empty());
+    assert_eq!(
+        read(&mut Cursor::new(&omitted), Limits::default())
+            .unwrap()
+            .bitstream_info[&1],
+        info
+    );
+
+    let (mut embedded, index) = file();
+    let offset = index.bitstreams[0].payload.offset as usize;
+    embedded[offset] ^= 1;
+    assert!(matches!(
+        scan(&embedded, Limits::default()),
+        Err(Error::Invalid("BITS SHA-256 mismatch"))
+    ));
+    assert!(matches!(
+        read(&mut Cursor::new(&embedded), Limits::default()),
+        Err(Error::Invalid("BITS SHA-256 mismatch"))
+    ));
+}
+
+#[test]
+fn bits_need_matching_preceding_format_descriptor() {
+    let (bytes, _) = file();
+    let tag = bytes.windows(4).position(|v| v == b"BINF").unwrap();
+    let length = u64::from_le_bytes(bytes[tag + 4..tag + 12].try_into().unwrap()) as usize;
+    let mut missing = bytes.clone();
+    missing.drain(tag..tag + 12 + length);
+    assert!(matches!(
+        scan(&missing, Limits::default()),
+        Err(Error::Invalid("BITS requires preceding BINF"))
+    ));
+
+    let mut wrong_codec = bytes.clone();
+    let bits = wrong_codec.windows(4).position(|v| v == b"BITS").unwrap();
+    wrong_codec[bits + 12 + 4..bits + 12 + 8].copy_from_slice(b"jpeg");
+    assert!(matches!(
+        scan(&wrong_codec, Limits::default()),
+        Err(Error::Invalid("BITS codec differs from BINF"))
+    ));
 }
 
 #[test]

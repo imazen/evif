@@ -6,6 +6,11 @@ All notable changes to this repository. Format: [Keep a Changelog](https://keepa
 
 ### QUEUED BREAKING CHANGES
 
+- Major-1 original encodes now require a preceding BINF syntax descriptor when
+  BITS is embedded. BINF records format ID, explicit syntax-version state, optional profile/level,
+  decoder parameters, original size and hash; it may stand alone when bytes are
+  omitted. Embedded BITS are checked against the descriptor. Earlier draft BITS
+  records without BINF require regeneration.
 - Major-1 hashes now use `{algorithm, digest}` records with variable-length hex.
   Samples use `canonical` plus optional `checks`; payloads and MEND use `hash`,
   and score references carry tagged hashes. Media domain revision 4 binds the

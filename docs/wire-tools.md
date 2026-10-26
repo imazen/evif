@@ -36,10 +36,26 @@ Paths resolve relative to the plan file, not the current directory. A segment's
 sample hashes must come from its actual decoded frames. `pack` checks declared
 payload hashes and media structure, but cannot certify those sample hashes.
 
-Optional `bitstreams` entries contain `asset` (local ID), `codec` (four ASCII
-characters, e.g. `"avif"` or `"evif"`), and `path`. The same encoding works for
-reference and candidate. Omit this array or leave it empty when original encoded
-bytes are unnecessary. Original bytes never substitute for rendition segments.
+Optional `bitstreams` entries contain `info` (the [BINF descriptor](../SPEC.md#7-original-encoded-bytes-and-provenance))
+and `path`. The descriptor names the decoding syntax, optional syntax version,
+profile, level, decoder-critical parameters, original byte count and optional
+hash. `path` is null or absent when original bytes are omitted; the descriptor
+still records what was encoded. With a path, its byte count must match `info.bytes`
+and its SHA-256 must match `info.hash`. The same shape works for reference and
+candidate. Omit the array when no original encode exists. Original bytes never
+substitute for rendition segments.
+
+```json
+{"bitstreams":[{"info":{"asset":2,"codec":"avif","format":"image/avif",
+ "version":{"kind":"unknown"},"profile":"main","level":"4.0","parameters":{},
+ "bytes":"1048576","hash":null},"path":null}]}
+```
+
+`version.kind` is `declared` (with a `value`), `unversioned` (the syntax has no
+version), or `unknown` (the version cannot be established). It never means the
+encoder's software version. Record implementation builds
+and scoring provenance in adapter-owned metadata. `wire inspect` displays each
+encoded descriptor, including objects whose bytes were omitted.
 
 The packer prints media hashes to use in the `candidate`/`reference` fields of a
 score envelope. Score `data` belongs to the named adapter and can retain metric

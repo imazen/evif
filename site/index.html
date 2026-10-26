@@ -173,7 +173,7 @@
 
   <h2>Inside a major-1 coffin</h2>
   <ol class="wire" aria-label="Record order">
-    <li>16-byte header</li><li>ASST</li><li>SEGM + PNGF / IMIJ</li><li>BITS?</li>
+    <li>16-byte header</li><li>ASST</li><li>SEGM + PNGF / IMIJ</li><li>BINF?</li><li>BITS?</li>
     <li class="seal">MEND</li><li class="score">scor</li><li class="score">scor …</li>
   </ol>
   <p>Flat records: a four-letter tag, a little-endian 64-bit body length, then the body.
@@ -184,6 +184,7 @@
     <tr><td>ASST</td><td>Asset identity, geometry, sample type, color interpretation and looping</td></tr>
     <tr><td>SEGM</td><td>Ordered frame range, exact rational durations, sample hashes and carrier location</td></tr>
     <tr><td>PNGF / IMIJ</td><td>Lossless rendition segment, with the same semantics for either asset</td></tr>
+    <tr><td>BINF</td><td>Original encode's format, syntax version, profile, decoder parameters, byte count and hash; retained when bytes are omitted</td></tr>
     <tr><td>BITS</td><td>Optional original encode for either asset; external codecs or EVIF-specific compression</td></tr>
     <tr><td>MEND</td><td>SHA-256 media identities binding canonical XXH3 sample digests, interpretation, timing and looping</td></tr>
     <tr><td>scor</td><td>Appendable evaluation envelope and adapter-owned JSON; corrections explicitly supersede earlier scores</td></tr>
@@ -195,6 +196,11 @@
     optional; external payloads require a hash and are never fetched automatically.
     Hash records name their algorithm and accept longer digests without a new layout. Scores and notes
     have no mandatory checksum, and there is no whole-file seal.</p>
+  <p><code>BINF</code> names the decoding format explicitly, so even a stream with no
+    magic bytes or declared version can be interpreted. The descriptor distinguishes
+    a declared version, an unversioned syntax and an unknown version; encoder software
+    versions belong in provenance. Embedded
+    <code>BITS</code> must match its descriptor's size and SHA-256 hash.</p>
   <p>Unknown uppercase-first records are critical and must be refused. Lowercase ancillary records
     can pass through unchanged. Streaming readers index bounded metadata and payload locations.
     See the <a href="https://github.com/imazen/evif/blob/main/SPEC.md">wire specification</a> for

@@ -39,7 +39,9 @@ fn pack_and_append_preserve_payloads_and_refuse_overwrites() {
         },
     };
     let plan = serde_json::json!({"assets":[a], "segments":[{"segment":s,"path":"input.png"}],
-        "bitstreams":[{"asset":1,"codec":"png ","path":"input.png"}]});
+        "bitstreams":[{"info":{"asset":1,"codec":"png ","format":"image/png",
+            "version":{"kind":"unversioned"},"profile":null,"level":null,"parameters":{},
+            "bytes":png.len().to_string(),"hash":Hash::of(&png)},"path":"input.png"}]});
     let plan_path = root.join("plan.json");
     fs::write(&plan_path, serde_json::to_vec(&plan).unwrap()).unwrap();
     let output = root.join("out.evif");
@@ -55,6 +57,32 @@ fn pack_and_append_preserve_payloads_and_refuse_overwrites() {
     assert!(cli::run(&reg, &args).is_err());
     assert_eq!(fs::read(&output).unwrap(), before);
     let index = scan(&before, Limits::default()).unwrap();
+    assert_eq!(index.bitstream_info[&1].format, "image/png");
+    assert_eq!(index.bitstream_info[&1].version, SyntaxVersion::Unversioned);
+    let mut omitted_plan = plan.clone();
+    omitted_plan["bitstreams"][0]["path"] = serde_json::Value::Null;
+    omitted_plan["bitstreams"][0]["info"]["hash"] = serde_json::Value::Null;
+    let omitted_plan_path = root.join("omitted-plan.json");
+    fs::write(
+        &omitted_plan_path,
+        serde_json::to_vec(&omitted_plan).unwrap(),
+    )
+    .unwrap();
+    let omitted_output = root.join("omitted.evif");
+    cli::run(
+        &reg,
+        &[
+            "wire".into(),
+            "pack".into(),
+            omitted_plan_path.display().to_string(),
+            omitted_output.display().to_string(),
+        ],
+    )
+    .unwrap();
+    let omitted = scan(&fs::read(&omitted_output).unwrap(), Limits::default()).unwrap();
+    assert!(omitted.bitstreams.is_empty());
+    assert_eq!(omitted.bitstream_info[&1].bytes.0, png.len() as u64);
+    assert_eq!(omitted.roots, index.roots);
     let p = index.segments[0].payload.unwrap();
     let embedded = &before[p.offset as usize..(p.offset + p.length) as usize];
     assert_eq!(embedded, png);

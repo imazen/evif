@@ -49,12 +49,13 @@ fn read_state<R: Read>(reader: &mut R, limits: Limits) -> Result<State, Error> {
                 check(len > 8, "short BITS")?;
                 reader.read_exact(&mut prefix)?;
             }
-            let hash =
-                if matches!(&tag, b"PNGF" | b"IMIJ") && state.expected_payload_hash().is_some() {
-                    Some(Sha256::new())
-                } else {
-                    None
-                };
+            let hash = if tag == *b"BITS"
+                || (matches!(&tag, b"PNGF" | b"IMIJ") && state.expected_payload_hash().is_some())
+            {
+                Some(Sha256::new())
+            } else {
+                None
+            };
             let actual = transfer(
                 reader,
                 &mut std::io::sink(),
@@ -64,7 +65,7 @@ fn read_state<R: Read>(reader: &mut R, limits: Limits) -> Result<State, Error> {
             if matches!(&tag, b"PNGF" | b"IMIJ") {
                 state.payload(span, actual)?;
             } else if bits {
-                state.bits(&prefix, span)?;
+                state.bits(&prefix, span, actual.expect("BITS hash computed"))?;
             } else {
                 state.index.ancillary.push(Ancillary { tag, payload: span });
             }
@@ -145,8 +146,11 @@ impl<W: Write> Writer<W> {
             let actual = self.state.expected_payload_hash().map(|_| Hash::of(body));
             self.state.payload(span, actual)?;
         } else if tag == *b"BITS" {
-            self.state
-                .bits(body.get(..8).ok_or(Error::Invalid("short BITS"))?, span)?;
+            self.state.bits(
+                body.get(..8).ok_or(Error::Invalid("short BITS"))?,
+                span,
+                Hash::of(&body[8..]),
+            )?;
         } else {
             self.state
                 .index
@@ -160,6 +164,10 @@ impl<W: Write> Writer<W> {
     }
     pub fn asset(&mut self, asset: &Asset) -> Result<(), Error> {
         self.record(*b"ASST", &serde_json::to_vec(asset)?)
+    }
+    /// Declare original encoded syntax and cost before optional BITS bytes.
+    pub fn bitstream_info(&mut self, info: &BitstreamInfo) -> Result<(), Error> {
+        self.record(*b"BINF", &serde_json::to_vec(info)?)
     }
     /// For embedded storage, copies exactly `length` bytes from `source`. For
     /// external or shared-page storage, length must be zero and source is not read.
@@ -218,10 +226,30 @@ impl<W: Write> Writer<W> {
         let mut prefix = [0; 8];
         prefix[..4].copy_from_slice(&asset.to_le_bytes());
         prefix[4..].copy_from_slice(&codec);
-        self.state.bits(&prefix, Span { offset, length })?;
+        let expected = self
+            .state
+            .index
+            .bitstream_info
+            .get(&asset)
+            .ok_or(Error::Invalid("BITS requires preceding BINF"))?;
+        check(
+            expected.codec.as_bytes() == codec,
+            "BITS codec differs from BINF",
+        )?;
+        check(
+            expected.bytes.0 == length - 8,
+            "BITS length differs from BINF",
+        )?;
+        let expected_hash = expected
+            .hash
+            .as_ref()
+            .ok_or(Error::Invalid("embedded BITS requires a hash"))?;
+        expected_hash.require_sha256()?;
         self.sink.write_all(&record_header(*b"BITS", length))?;
         self.sink.write_all(&prefix)?;
-        transfer(source, &mut self.sink, length - 8, None)?;
+        let actual = transfer(source, &mut self.sink, length - 8, Some(Sha256::new()))?
+            .expect("BITS hash computed");
+        self.state.bits(&prefix, Span { offset, length }, actual)?;
         self.poisoned = false;
         Ok(())
     }

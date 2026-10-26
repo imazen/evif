@@ -167,7 +167,7 @@ def check_apng(a, segment, body, path):
 
 def inspect(path, decode_apng=False):
     assets, hashes, counts, scores = {}, {}, {}, []
-    owners = {}
+    owners, encoded, embedded = {}, {}, set()
     pending, ended, records, decoded_segments = None, False, 0, 0
     with path.open("rb") as source:
         assert exact(source, 16) == b"\x8bEVIF\r\n\x1a\x01\0\0\0\0\0\0\0"
@@ -187,7 +187,7 @@ def inspect(path, decode_apng=False):
                     decoded_segments += 1
                 pending = None
                 continue
-            if tag in (b"ASST", b"SEGM", b"MEND", b"scor"):
+            if tag in (b"ASST", b"SEGM", b"BINF", b"MEND", b"scor"):
                 value = json.loads(body.decode("utf-8"), object_pairs_hook=pairs)
             if tag == b"ASST":
                 assert not ended and value["id"] not in assets
@@ -234,6 +234,14 @@ def inspect(path, decode_apng=False):
                     assert kind == "external"
                     parse_hash(value["storage"]["hash"])
                     assert not decode_apng, "external samples unavailable to oracle"
+            elif tag == b"BINF":
+                assert not ended and value["asset"] in assets and value["asset"] not in encoded
+                assert len(value["codec"]) == 4 and value["format"] and u64(value["bytes"]) > 0
+                version = value["version"]
+                assert version["kind"] in ("declared", "unversioned", "unknown")
+                assert (version.get("value") is not None) == (version["kind"] == "declared")
+                assert isinstance(value["parameters"], dict)
+                encoded[value["asset"]] = value
             elif tag == b"MEND":
                 assert not ended
                 assert all(counts[k] == u64(a["frame_count"]) for k, a in assets.items())
@@ -245,7 +253,14 @@ def inspect(path, decode_apng=False):
                 assert value.get("supersedes") is None or value["supersedes"] in scores
                 scores.append(value["id"])
             elif tag == b"BITS":
-                assert not ended and len(body) > 8 and struct.unpack_from("<I", body)[0] in assets
+                assert not ended and len(body) > 8
+                asset = struct.unpack_from("<I", body)[0]
+                assert asset in encoded and asset not in embedded
+                info = encoded[asset]
+                assert body[4:8] == info["codec"].encode("ascii")
+                assert len(body) - 8 == u64(info["bytes"])
+                verify_hash(info["hash"], body[8:])
+                embedded.add(asset)
             else:
                 assert tag[:1].islower(), "unknown critical record"
         assert ended and pending is None

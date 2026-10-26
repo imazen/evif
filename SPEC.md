@@ -56,6 +56,7 @@ Reserved flags must be zero. Unsupported files can still be copied as opaque byt
 | SEGM | Segment JSON | Next contiguous frame range for a declared asset |
 | PNGF | Complete PNG/APNG file | Immediately follows its embedded SEGM |
 | IMIJ | Complete lossless IMI file | Immediately follows its embedded SEGM |
+| BINF | Original-encode descriptor JSON | Optional, at most one per asset; precedes BITS |
 | BITS | Asset u32, codec FourCC, original encoded bytes | Optional, at most one per asset |
 | MEND | Array of media roots | Exactly once; closes immutable media |
 | scor | Evaluation JSON | Repeatable, only after MEND |
@@ -69,6 +70,7 @@ SEGM reference-segment-0
 PNGF reference-apng-bytes
 SEGM candidate-segment-0
 IMIJ candidate-imi-bytes
+BINF optional-candidate-encode-descriptor
 BITS optional-candidate-encode
 MEND both-media-roots
 scor first-evaluation
@@ -331,10 +333,39 @@ claimed samples.
 
 ## 7. Original encoded bytes and provenance
 
-BITS is `asset:u32 || codec:4 bytes || encoded bytes` for either reference or
-candidate. `evif` means EVIF-specific coding, not a nested EVIF container. Codec
-identifiers are never filesystem paths. Encoded bytes must be nonempty. BITS is
-optional and cannot substitute for a rendition.
+An optional BINF JSON record describes one original encoded object for either
+asset. It may stand alone when the original bytes are omitted. If BITS is present,
+its BINF must precede it. BITS remains `asset:u32 || codec:4 bytes || encoded
+bytes`; the asset and codec must match BINF, the byte count must match `bytes`,
+and the bytes must match BINF's SHA-256 hash. `evif` means EVIF-specific coding,
+not a nested EVIF container. Encoded bytes must be nonempty. BITS cannot
+substitute for a rendition.
+
+BINF has exactly these fields:
+
+```json
+{"asset":2,"codec":"cool","format":"urn:imazen:cool-chic-codestream",
+ "version":{"kind":"unversioned"},"profile":"low-latency","level":null,
+ "parameters":{"stream_flavor":"low-latency"},"bytes":"12345",
+ "hash":null}
+```
+
+`format` is a stable ASCII media type or URI (1..256 printable non-space bytes)
+that identifies the **decoding syntax**, even when bytes have no magic. `codec`
+is exactly four printable ASCII bytes, including trailing spaces. `version` is
+required: `{"kind":"declared","value":"2"}` for a known syntax version,
+`{"kind":"unversioned"}` when the syntax defines no version, or
+`{"kind":"unknown"}` when its version cannot be established. These never mean
+the encoder software version. `profile` and `level` are optional syntax
+qualifiers. Non-null qualifiers and declared version values are 1..128 UTF-8
+bytes without control characters. `parameters` is a JSON object for format-specific decoder-critical
+facts (such as a model digest or stream flavor). Portable descriptors identify
+external models by digest rather than a filesystem path. A decoder must understand
+its required parameters before interpreting BITS. `bytes` is a positive decimal-string count of the *original encoded
+object*, even if BITS is omitted. `hash` may be null only when BITS is omitted;
+when BITS is present it must be SHA-256. A recorded hash for omitted bytes is a
+claim until those bytes are recovered. Neither BINF nor BITS changes the media
+root: media identity names resolved samples, not a particular codec encode.
 
 Codec FourCCs identify the actual encoded syntax, not the encoder implementation:
 `jpeg` for JPEG, `png ` for PNG, `avif` for AVIF, `jxl ` for JPEG XL,
@@ -345,10 +376,10 @@ its frame range, and the evaluation's `reference`/`candidate` fields assign
 roles. This permits the same asset to be a reference in one score and a
 candidate in another without rewriting media bytes.
 
-Recorded size/checksum after byte omission, encoder/decoder versions, seeds,
-source labels and recipes may use ancillary application-owned JSON (`meta`, for
-example). Label recorded size separately from measured embedded BITS size. Never
-count rendition storage as candidate codec cost.
+Encoder/decoder *implementation* versions, seeds, source labels and recipes may
+use ancillary application-owned JSON (`meta`, for example). They are distinct
+from BINF's syntax version. Label BINF's recorded size separately from measured
+embedded BITS size. Never count rendition storage as candidate codec cost.
 
 ## 8. Appendable scoring metadata
 

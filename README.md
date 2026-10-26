@@ -23,8 +23,10 @@ See [shared page storage](docs/imij-bundles.md).
 
 The new [major-1 wire format](SPEC.md) stores reference and candidate with identical
 SDR/HDR still/video asset records, optional original bytes, and appendable scoring
-JSON. `evif::wire` reads/writes it without buffering whole payloads. The probe
-commands below still use the [legacy still format](docs/legacy-wire-0.md);
+JSON. `evif::wire` reads/writes it without buffering whole payloads. `BINF`
+records an original encode's format ID, optional syntax version and decoder
+parameters, even when `BITS` is omitted or the stream has no magic.
+The commands below still use the [legacy still format](docs/legacy-wire-0.md);
 the new container does not itself run video metrics or render an HDR display.
 Use [`evif wire pack`, `inspect`, and `append`](docs/wire-tools.md) for major-1 files.
 Decoded samples use canonical XXH3-128 with an optional SHA-256 check; adding that
@@ -110,7 +112,10 @@ candidate, and scores as JSON. Colliding codec/rendition extensions use a separa
 it fails if those bytes were omitted. EVIF-specific candidate streams use the
 `.evifbits` extension to distinguish them from complete `.evif` containers.
 
-## What is in the coffin
+## What is in the legacy still-image coffin
+
+These chunks describe major 0. Major 1 uses the [new record grammar](SPEC.md),
+including a different `BINF` descriptor for either asset.
 
 | chunk | holds |
 |---|---|

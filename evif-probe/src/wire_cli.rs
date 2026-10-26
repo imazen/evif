@@ -1,6 +1,6 @@
 //! Major-1 transport tools. Codec/sample verification is a separate operation.
 use crate::Res;
-use evif::wire::{self, Asset, Limits, Segment, Storage, Writer};
+use evif::wire::{self, Asset, BitstreamInfo, Limits, Segment, Storage, SyntaxVersion, Writer};
 use serde::Deserialize;
 use std::{
     fs::{self, File, OpenOptions},
@@ -27,9 +27,8 @@ struct PlannedSegment {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct PlannedBits {
-    asset: u32,
-    codec: String,
-    path: PathBuf,
+    info: BitstreamInfo,
+    path: Option<PathBuf>,
 }
 
 fn small_file(path: &Path, limit: u64) -> Res<Vec<u8>> {
@@ -72,6 +71,27 @@ pub(crate) fn run(args: &[String]) -> Res<()> {
                     root.hash
                 );
             }
+            for info in index.bitstream_info.values() {
+                println!(
+                    "  encoded asset {}: {} ({}) version {} profile {} level {}, {} bytes, {}",
+                    info.asset,
+                    info.format,
+                    info.codec,
+                    match &info.version {
+                        SyntaxVersion::Declared { value } => value.as_str(),
+                        SyntaxVersion::Unversioned => "unversioned",
+                        SyntaxVersion::Unknown => "unknown",
+                    },
+                    info.profile.as_deref().unwrap_or("none"),
+                    info.level.as_deref().unwrap_or("none"),
+                    info.bytes.0,
+                    if index.bitstreams.iter().any(|b| b.asset == info.asset) {
+                        "embedded"
+                    } else {
+                        "bytes omitted"
+                    }
+                );
+            }
             println!(
                 "container and declared embedded payload hashes checked; decoded samples not verified"
             );
@@ -109,10 +129,18 @@ fn pack(plan_path: &Path, output: &Path) -> Res<()> {
         }
     }
     for b in &plan.bitstreams {
-        if b.codec.len() != 4 || !b.codec.is_ascii() {
-            return Err("codec must be four ASCII bytes".into());
+        b.info.validate().map_err(|e| e.to_string())?;
+        if let Some(path) = &b.path {
+            let len = fs::metadata(base.join(path))
+                .map_err(|e| e.to_string())?
+                .len();
+            if len != b.info.bytes.0 {
+                return Err("bitstream size differs from BINF".into());
+            }
+            if b.info.hash.is_none() {
+                return Err("embedded bitstream needs SHA-256 hash".into());
+            }
         }
-        fs::metadata(base.join(&b.path)).map_err(|e| e.to_string())?;
     }
     let file = OpenOptions::new()
         .write(true)
@@ -134,14 +162,16 @@ fn pack(plan_path: &Path, output: &Path) -> Res<()> {
             }
         }
         for bits in &plan.bitstreams {
-            let mut source = File::open(base.join(&bits.path))?;
-            let len = source.metadata()?.len();
-            writer.bitstream(
-                bits.asset,
-                bits.codec.as_bytes().try_into().unwrap(),
-                &mut source,
-                len,
-            )?;
+            writer.bitstream_info(&bits.info)?;
+            if let Some(path) = &bits.path {
+                let mut source = File::open(base.join(path))?;
+                writer.bitstream(
+                    bits.info.asset,
+                    bits.info.codec.as_bytes().try_into().unwrap(),
+                    &mut source,
+                    bits.info.bytes.0,
+                )?;
+            }
         }
         let roots = writer.finish_media()?;
         writer.finish()?;
