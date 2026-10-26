@@ -298,6 +298,67 @@ impl State {
                         }
                         self.pending = Some(segment);
                     }
+                    Storage::EmbeddedPages {
+                        hash,
+                        first_page,
+                        total_pages,
+                    } => {
+                        check(segment.carrier == Carrier::Imi, "page windows require IMI")?;
+                        check(
+                            total_pages.0 <= self.limits.max_frames_per_segment as u64,
+                            "IMI page count exceeds configured limit",
+                        )?;
+                        check(
+                            first_page
+                                .0
+                                .checked_add(count)
+                                .is_some_and(|end| end <= total_pages.0),
+                            "IMI page window outside carrier",
+                        )?;
+                        if let Some(hash) = hash {
+                            hash.require_sha256()?;
+                        }
+                        self.pending = Some(segment);
+                    }
+                    Storage::SharedPages {
+                        source_asset,
+                        source_first_frame,
+                        first_page,
+                    } => {
+                        check(segment.carrier == Carrier::Imi, "page windows require IMI")?;
+                        let source = self
+                            .index
+                            .segments
+                            .iter()
+                            .find(|s| {
+                                s.segment.asset == *source_asset
+                                    && s.segment.first_frame == *source_first_frame
+                            })
+                            .ok_or(Error::Invalid("shared carrier must already exist"))?;
+                        let Storage::EmbeddedPages { total_pages, .. } = source.segment.storage
+                        else {
+                            return Err(Error::Invalid(
+                                "shared carrier must name an embedded page owner",
+                            ));
+                        };
+                        check(
+                            first_page
+                                .0
+                                .checked_add(count)
+                                .is_some_and(|end| end <= total_pages.0),
+                            "IMI page window outside carrier",
+                        )?;
+                        let mut owner = self.index.assets[source_asset].clone();
+                        owner.id = asset.id;
+                        owner.kind = asset.kind;
+                        owner.frame_count = asset.frame_count;
+                        owner.plays = asset.plays;
+                        check(owner == *asset, "shared carrier signal differs")?;
+                        let payload = source
+                            .payload
+                            .ok_or(Error::Invalid("shared carrier has no payload"))?;
+                        self.commit_segment(segment, Some(payload));
+                    }
                     Storage::External { uri, .. } => {
                         check(!uri.is_empty(), "empty external URI")?;
                         self.commit_segment(segment, None);
@@ -364,7 +425,7 @@ impl State {
     }
     fn expected_payload_hash(&self) -> Option<&Hash> {
         self.pending.as_ref().and_then(|s| match &s.storage {
-            Storage::Embedded { hash } => hash.as_ref(),
+            Storage::Embedded { hash } | Storage::EmbeddedPages { hash, .. } => hash.as_ref(),
             _ => None,
         })
     }

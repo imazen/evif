@@ -99,10 +99,10 @@ fn pack(plan_path: &Path, output: &Path) -> Res<()> {
     // Avoid creating output for missing inputs or ambiguous embedded/external plans.
     for p in &plan.segments {
         match (&p.segment.storage, &p.path) {
-            (Storage::Embedded { .. }, Some(path)) => {
+            (Storage::Embedded { .. } | Storage::EmbeddedPages { .. }, Some(path)) => {
                 fs::metadata(base.join(path)).map_err(|e| e.to_string())?;
             }
-            (Storage::External { .. }, None) => {}
+            (Storage::External { .. } | Storage::SharedPages { .. }, None) => {}
             _ => {
                 return Err("embedded segments need path; external segments must omit path".into());
             }

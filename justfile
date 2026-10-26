@@ -93,3 +93,6 @@ possession-check:
 
 possession-test:
     {{heavy}} cargo test --release -p evif-probe --features possession --test possession -- --test-threads=1
+
+shared-pages-check:
+    {{heavy}} cargo test --release -p evif --test wire

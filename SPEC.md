@@ -186,6 +186,37 @@ float frames. Embedded storage must immediately precede its matching PNGF/IMIJ
 record. The body is the carrier file without another wrapper, and must be nonempty.
 Optional `hash` covers those exact bytes.
 
+IMI page bundles can share lossless reference prediction across renditions:
+
+```json
+{"kind":"embedded-pages","hash":null,"first_page":"0","total_pages":"2"}
+{"kind":"shared-pages","source_asset":1,"source_first_frame":"0","first_page":"1"}
+```
+
+`embedded-pages` immediately precedes one self-contained IMIJ **pages** file.
+`total_pages` is its exact page count, including prediction helper pages.
+`first_page` selects consecutive pages, one per SEGM frame. `shared-pages`
+selects another window from an earlier `embedded-pages` segment, addressed by
+its asset ID and first frame ordinal; it has no following payload. References
+must be direct and backward: no chains, cycles, forward references or external
+objects. Both segments have identical geometry, sample format, color, nit scale
+and pixel aspect. Their kind, frame count and playback count may differ.
+Page indices and counts are u64 strings; checked window ends must not exceed
+`total_pages`. Readers limit the full carrier page count, not just selected pages.
+
+For example, page 0 stores the pristine reference and page 1 stores a distortion
+using IMI's lossless prediction from page 0. Both assets address the same carrier
+bytes. The codec chooses independent coding when prediction does not save space.
+For video, a bundle can hold reference frames followed by corresponding distorted
+frames; each SEGM selects its own contiguous window. All prediction dependencies
+stay inside that carrier. Helper pages are not extra presentation frames.
+A sample verifier must decode the selected pages with their declared IMI
+references, validate the exact carrier page count and signal, and check each
+selected frame hash. SEGM alone supplies page-bundle presentation durations;
+IMI page ordering is not a playback clock. Changing storage or prediction choices
+does not change media identity. A streaming reader may need to retain or revisit
+the shared carrier; use bounded bundles to bound that cost.
+
 External storage instead has exactly `kind:"external"`, nonempty `uri`, and a
 required `hash` over the external carrier's exact bytes. No payload record
 follows. Readers do not automatically fetch URIs. Missing objects mean unavailable
@@ -197,7 +228,8 @@ not success or a mismatch. External payload hashes can use unknown algorithms
 because the container reader does not fetch or verify those objects. The hash
 record itself remains parseable independently of algorithm support.
 
-Each segment is independently decodable. Read it once; expand blend/disposal to
+Each segment resolves to a self-contained carrier (possibly shared as above).
+For ordinary embedded/external carriers, expand blend/disposal to
 complete canvases and exclude a nonparticipating APNG poster. Decoded frame count,
 geometry, layout/type, interpretation, hashes and durations must match ASST/SEGM.
 Carrier time starts locally at zero; ASST owns whole-asset looping. Single PNGs

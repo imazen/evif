@@ -421,11 +421,25 @@ impl Frame {
 pub enum Storage {
     /// Immediately followed by one PNGF or IMIJ record.
     Embedded { hash: Option<Hash> },
+    /// A self-contained IMI page bundle. Select consecutive pages starting at
+    /// `first_page`; other pages are codec prediction dependencies, not frames.
+    EmbeddedPages {
+        hash: Option<Hash>,
+        first_page: U64,
+        total_pages: U64,
+    },
+    /// Reuse an earlier EmbeddedPages payload, selecting another page window.
+    /// References are direct, backward-only, and do not create dependency chains.
+    SharedPages {
+        source_asset: u32,
+        source_first_frame: U64,
+        first_page: U64,
+    },
     /// Never fetched automatically. Digest covers the exact external bytes.
     External { uri: String, hash: Hash },
 }
 
-/// One independently decodable segment. Subrectangles, posters and codec
+/// One frame window in a self-contained carrier, optionally shared. Subrectangles, posters and codec
 /// preroll do not count as logical presentation frames.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

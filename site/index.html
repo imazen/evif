@@ -153,6 +153,10 @@
     that distortion exactly; it does not restore the pristine source. Either asset can use PNG/APNG
     or IMIJ. Keep the original codec bytes for decoder replay, or omit them and retain their size
     and checksum. One rendition per asset is sufficient.</p>
+  <p>Major-1 IMIJ page bundles can store the pristine reference once and predict
+    distorted renditions from it losslessly. Explicit page selections keep reference
+    and candidate samples separate; the codec uses independent coding when smaller.
+    The same mapping supports corresponding frames of SDR or HDR sequences.</p>
   <p>Color primaries, transfer function, signal units, pixel aspect, frame durations and looping
     belong to the media. Viewing conditions, metric versions, preparation steps and results belong
     to adapter-owned evaluation JSON. PQ, HLG and relative or absolute linear light have explicit

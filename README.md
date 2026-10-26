@@ -17,6 +17,9 @@ how those already-distorted pixels are stored; it does not undo the distortion.
 The original JPEG, AV1 or JPEG XL bytes are optional: keep them for decoder replay,
 or omit them while retaining their encoded size and checksum. You do not need both
 PNG and IMIJ copies of the same samples.
+Major-1 IMIJ page bundles can also share lossless prediction from the pristine
+reference across distorted renditions, without duplicating the reference payload.
+See [shared page storage](docs/imij-bundles.md).
 
 The new [major-1 wire format](SPEC.md) stores reference and candidate with identical
 SDR/HDR still/video asset records, optional original bytes, and appendable scoring

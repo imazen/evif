@@ -167,6 +167,7 @@ def check_apng(a, segment, body, path):
 
 def inspect(path, decode_apng=False):
     assets, hashes, counts, scores = {}, {}, {}, []
+    owners = {}
     pending, ended, records, decoded_segments = None, False, 0, 0
     with path.open("rb") as source:
         assert exact(source, 16) == b"\x8bEVIF\r\n\x1a\x01\0\0\0\0\0\0\0"
@@ -214,9 +215,23 @@ def inspect(path, decode_apng=False):
                     hashes[key].update(struct.pack("<Q", len(digest)))
                     hashes[key].update(digest)
                     counts[key] += 1
-                if value["storage"]["kind"] == "embedded":
+                storage = value["storage"]
+                kind = storage["kind"]
+                if kind in ("embedded", "embedded-pages"):
+                    if kind == "embedded-pages":
+                        assert value["carrier"] == "imi"
+                        assert u64(storage["first_page"]) + len(value["frames"]) <= u64(storage["total_pages"])
+                        owners[(key, value["first_frame"])] = value
                     pending = value
+                elif kind == "shared-pages":
+                    assert value["carrier"] == "imi"
+                    owner = owners[(storage["source_asset"], storage["source_first_frame"])]
+                    assert u64(storage["first_page"]) + len(value["frames"]) <= u64(owner["storage"]["total_pages"])
+                    ignored = {"id", "kind", "frame_count", "plays"}
+                    assert {k:v for k,v in assets[key].items() if k not in ignored} == {k:v for k,v in assets[owner["asset"]].items() if k not in ignored}
+                    assert not decode_apng, "IMI samples require an IMI decoder"
                 else:
+                    assert kind == "external"
                     parse_hash(value["storage"]["hash"])
                     assert not decode_apng, "external samples unavailable to oracle"
             elif tag == b"MEND":

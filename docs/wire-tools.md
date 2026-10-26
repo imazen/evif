@@ -29,7 +29,9 @@ The plan is an object with:
 
 This empty outline is not valid media. Populate `assets` with ASST objects from
 the specification. Each `segments` entry is `{"segment": <SEGM>, "path": "clip.png"}`
-for embedded storage, or `{"segment": <SEGM>, "path": null}` for external storage.
+for embedded or embedded-pages storage, or `{"segment": <SEGM>, "path": null}`
+for external or shared-pages storage. IMI page bundles can share reference-based
+lossless prediction across assets; see [page storage](../SPEC.md#5-segm-and-rendition-payloads).
 Paths resolve relative to the plan file, not the current directory. A segment's
 sample hashes must come from its actual decoded frames. `pack` checks declared
 payload hashes and media structure, but cannot certify those sample hashes.

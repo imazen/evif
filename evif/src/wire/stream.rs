@@ -162,7 +162,7 @@ impl<W: Write> Writer<W> {
         self.record(*b"ASST", &serde_json::to_vec(asset)?)
     }
     /// For embedded storage, copies exactly `length` bytes from `source`. For
-    /// external storage, length must be zero and source is not read.
+    /// external or shared-page storage, length must be zero and source is not read.
     pub fn segment<R: Read>(
         &mut self,
         segment: &Segment,
@@ -170,8 +170,11 @@ impl<W: Write> Writer<W> {
         length: u64,
     ) -> Result<(), Error> {
         self.usable()?;
-        if matches!(segment.storage, Storage::External { .. }) {
-            check(length == 0, "external segment cannot embed bytes")?;
+        if matches!(
+            segment.storage,
+            Storage::External { .. } | Storage::SharedPages { .. }
+        ) {
+            check(length == 0, "non-owning segment cannot embed bytes")?;
             return self.record(*b"SEGM", &serde_json::to_vec(segment)?);
         }
         self.record(*b"SEGM", &serde_json::to_vec(segment)?)?;

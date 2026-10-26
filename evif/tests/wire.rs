@@ -699,3 +699,145 @@ fn streaming_offsets_exceed_four_gib_without_a_large_allocation() {
     assert_eq!(index.file_end, bytes.len() as u64 + 12 + len);
     assert_eq!(index.ancillary.last().unwrap().payload.length, len);
 }
+
+#[test]
+fn shared_imi_pages_bind_samples_without_duplicating_the_carrier() {
+    let reference = asset(1, Kind::Still);
+    let candidate = asset(2, Kind::Still);
+    let owner = Segment {
+        asset: 1,
+        first_frame: U64(0),
+        carrier: Carrier::Imi,
+        frames: frames(&reference),
+        storage: Storage::EmbeddedPages {
+            hash: Some(Hash::of(b"self contained page bundle")),
+            first_page: U64(0),
+            total_pages: U64(2),
+        },
+    };
+    let shared = Segment {
+        asset: 2,
+        first_frame: U64(0),
+        carrier: Carrier::Imi,
+        frames: frames(&candidate),
+        storage: Storage::SharedPages {
+            source_asset: 1,
+            source_first_frame: U64(0),
+            first_page: U64(1),
+        },
+    };
+    let encode = |owner: &Segment, shared: &Segment| -> Result<Vec<u8>, Error> {
+        let mut writer = Writer::new(Vec::new(), Limits::default())?;
+        writer.asset(&reference)?;
+        writer.asset(&candidate)?;
+        writer.segment(owner, &mut &b"self contained page bundle"[..], 26)?;
+        writer.segment(shared, &mut std::io::empty(), 0)?;
+        writer.finish_media()?;
+        writer.finish().map(|(bytes, _)| bytes)
+    };
+    let bytes = encode(&owner, &shared).unwrap();
+    let index = read(&mut Cursor::new(&bytes), Limits::default()).unwrap();
+    let sliced = scan(&bytes, Limits::default()).unwrap();
+    assert_eq!(sliced.segments, index.segments);
+    assert_eq!(sliced.roots, index.roots);
+    let mut corrupt = bytes.clone();
+    let offset = index.segments[0].payload.unwrap().offset as usize;
+    corrupt[offset] ^= 1;
+    assert!(scan(&corrupt, Limits::default()).is_err());
+    assert!(read(&mut Cursor::new(&corrupt), Limits::default()).is_err());
+    assert_eq!(index.segments[0].payload, index.segments[1].payload);
+    assert_eq!(index.roots[0].hash, index.roots[1].hash);
+    for page in [2, u64::MAX] {
+        let mut bad = shared.clone();
+        bad.storage = Storage::SharedPages {
+            source_asset: 1,
+            source_first_frame: U64(0),
+            first_page: U64(page),
+        };
+        assert!(encode(&owner, &bad).is_err());
+    }
+    let mut bad = shared.clone();
+    bad.storage = Storage::SharedPages {
+        source_asset: 2,
+        source_first_frame: U64(0),
+        first_page: U64(0),
+    };
+    assert!(encode(&owner, &bad).is_err());
+    let mut bad_owner = owner.clone();
+    bad_owner.carrier = Carrier::Png;
+    assert!(encode(&bad_owner, &shared).is_err());
+}
+
+#[test]
+fn shared_pages_reject_signal_conflicts_chains_and_payload_bytes() {
+    let a = asset(1, Kind::Still);
+    for conflict in 0..5 {
+        let mut b = asset(2, Kind::Still);
+        match conflict {
+            0 => b.width += 1,
+            1 => b.primaries = Primaries::Bt709,
+            2 => b.samples = Samples::U8,
+            3 => b.pixel_aspect = Rational::new(2, 1).unwrap(),
+            _ => b.channels = Channels::Rgb,
+        }
+        let mut w = Writer::new(Vec::new(), Limits::default()).unwrap();
+        w.asset(&a).unwrap();
+        w.asset(&b).unwrap();
+        let mut owner = segment(&a, b"x");
+        owner.carrier = Carrier::Imi;
+        owner.storage = Storage::EmbeddedPages {
+            hash: None,
+            first_page: U64(0),
+            total_pages: U64(3),
+        };
+        w.segment(&owner, &mut &b"x"[..], 1).unwrap();
+        let shared = Segment {
+            asset: 2,
+            storage: Storage::SharedPages {
+                source_asset: 1,
+                source_first_frame: U64(0),
+                first_page: U64(1),
+            },
+            ..owner
+        };
+        assert!(w.segment(&shared, &mut io::empty(), 0).is_err());
+    }
+    for payload in [false, true] {
+        let mut w = Writer::new(Vec::new(), Limits::default()).unwrap();
+        for id in 1..=3 {
+            w.asset(&asset(id, Kind::Still)).unwrap();
+        }
+        let mut owner = segment(&a, b"x");
+        owner.carrier = Carrier::Imi;
+        owner.storage = Storage::EmbeddedPages {
+            hash: None,
+            first_page: U64(0),
+            total_pages: U64(3),
+        };
+        w.segment(&owner, &mut &b"x"[..], 1).unwrap();
+        let shared = Segment {
+            asset: 2,
+            storage: Storage::SharedPages {
+                source_asset: 1,
+                source_first_frame: U64(0),
+                first_page: U64(1),
+            },
+            ..owner
+        };
+        if payload {
+            assert!(w.segment(&shared, &mut &b"x"[..], 1).is_err());
+        } else {
+            w.segment(&shared, &mut io::empty(), 0).unwrap();
+            let chained = Segment {
+                asset: 3,
+                storage: Storage::SharedPages {
+                    source_asset: 2,
+                    source_first_frame: U64(0),
+                    first_page: U64(2),
+                },
+                ..shared
+            };
+            assert!(w.segment(&chained, &mut io::empty(), 0).is_err());
+        }
+    }
+}

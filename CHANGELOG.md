@@ -31,6 +31,8 @@ All notable changes to this repository. Format: [Keep a Changelog](https://keepa
 ## Workspace
 
 ### Added
+- Major-1 IMIJ page windows and backward carrier sharing for lossless
+  reference-predicted renditions; selected samples retain their media identities.
 - Opt-in zenav1-svt and JPEG XL possession families with pinned codec replay,
   decoded candidate renditions, prioritized stress axes and a combination tail
   (`95cc0f37`).
