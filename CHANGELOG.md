@@ -71,6 +71,8 @@ All notable changes to this repository. Format: [Keep a Changelog](https://keepa
 ## evif-probe
 
 ### Added
+- Opt-in JPEG AI and Cool-chic possession families, with native-byte decoding
+  and a documented one-call external codec registry hook (`97c07ad5`).
 - `evif wire pack`, `inspect`, and `append`; score JSON passes through byte for
   byte and existing outputs are not overwritten (`0f81010f`).
 - Real PQ/HLG APNG wire fixtures with symmetric assets and an independent Python
