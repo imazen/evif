@@ -30,6 +30,11 @@ frames first, then N candidate frames predicting from pages 0 through N−1.
 EVIF durations define playback; the IMIJ page collection is not an animation.
 The plan assigns no implicit reference/candidate roles: appended scores do that.
 
+`evif-private unbundle INPUT.evif NEW_DIRECTORY` decodes selected pages, verifies
+every declared supported sample hash, and writes raw little-endian frames plus a
+new plan retaining the exact presentation durations. Unsupported hash algorithms
+are reported as unsupported. It refuses an existing output directory.
+
 The companion checks every encoded page against the input samples before writing
 the EVIF file. Inputs must share geometry, sample type and signal interpretation.
 The current command bounds a bundle to 4096 pages and 256 MiB of raw inputs; use
