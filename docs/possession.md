@@ -61,3 +61,5 @@ Run `just possession-check` and `just possession-test`. Set `HEAVY` to the
 resource wrapper for the machine. `EVIF_POSSESSION_ARTIFACTS` optionally exports
 native baseline bytes, the decoded PNG rendition and JSON parameters for an
 independent decoder check; it does not alter which tests run.
+
+[Integration checks and retained artifacts](../benchmarks/possession-2026-10-26.pointer.md).
