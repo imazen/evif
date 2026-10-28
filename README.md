@@ -251,3 +251,8 @@ that signaling in separate metadata.
 decoder and writes an exact PQ16 PNG rendition, including its CICP. This
 provides a lossless transport to teachers whose frozen ingress accepts PQ
 PNG/JXL rather than AVIF. The original AVIF remains the encoded-cost artifact.
+
+The native PQ research example also accepts `a3 INPUT NEW_OUTPUT_DIR` for a
+quality positive control and chroma-delta probes at qualities 95, 85, 75 and
+60. It deduplicates shared quality/delta cells, retains native PQ precision,
+and leaves perceptual labels to the separately pinned teacher.

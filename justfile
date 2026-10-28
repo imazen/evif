@@ -113,3 +113,6 @@ chroma-hdr input output:
 
 chroma-tools *args:
     {{heavy}} cargo run --release -p evif-probe --example chroma_tools -- {{args}}
+
+chroma-hdr-a3 input output:
+    {{heavy}} cargo run --release -p evif-probe --features possession-svt --example chroma_hdr -- a3 {{quote(input)}} {{quote(output)}}

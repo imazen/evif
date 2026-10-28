@@ -3,12 +3,16 @@ use enough::Unstoppable;
 use std::{fs, path::Path};
 use zenpixels_convert::{PixelBufferConvertExt, PixelDescriptor, TransferFunction};
 
-fn config(delta: i8, subsampling: zenavif::EncodeChromaSubsampling) -> zenavif::EncoderConfig {
+fn config(
+    quality: f32,
+    delta: i8,
+    subsampling: zenavif::EncodeChromaSubsampling,
+) -> zenavif::EncoderConfig {
     let mut knobs = zenavif::expert::SvtParams::default();
     knobs.chroma_q = Some((delta, delta));
     zenavif::EncoderConfig::new()
         .backend(zenavif::Av1Backend::Zenav1Svt)
-        .quality(95.0)
+        .quality(quality)
         .speed(6)
         .bit_depth(zenavif::EncodeBitDepth::Ten)
         .chroma_subsampling(subsampling)
@@ -19,12 +23,13 @@ fn config(delta: i8, subsampling: zenavif::EncodeChromaSubsampling) -> zenavif::
 }
 fn encode(
     img: imgref::ImgRef<'_, rgb::Rgb<u16>>,
+    quality: f32,
     delta: i8,
     sub: zenavif::EncodeChromaSubsampling,
 ) -> Result<Vec<u8>, String> {
     zenavif::encode_rgb16(
         img,
-        &config(delta, sub),
+        &config(quality, delta, sub),
         almost_enough::StopToken::new(Unstoppable),
     )
     .map(|e| e.avif_file)
@@ -71,7 +76,7 @@ fn pq_png_from_avif(bytes: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>>
     }
     Ok(png)
 }
-fn run(input: &Path, out: &Path) -> Result<(), Box<dyn std::error::Error>> {
+fn run(input: &Path, out: &Path, a3: bool) -> Result<(), Box<dyn std::error::Error>> {
     fs::create_dir(out)?;
     let decoded = zenpng::PngDecoderConfig::new()
         .decode(&fs::read(input)?)?
@@ -113,20 +118,54 @@ fn run(input: &Path, out: &Path) -> Result<(), Box<dyn std::error::Error>> {
         return Err("PQ reference PNG roundtrip changed samples/signaling".into());
     }
     fs::write(out.join("reference-bt2020-pq.png"), reference)?;
-    let refusal = encode(img, 0, zenavif::EncodeChromaSubsampling::Yuv444)
+    let refusal = encode(img, 95.0, 0, zenavif::EncodeChromaSubsampling::Yuv444)
         .expect_err("pinned SVT must explicitly refuse 444");
     if !refusal.contains("only Yuv420 is implemented") {
         return Err(format!("unexpected 444 refusal: {refusal}").into());
     }
     fs::write(out.join("444-refusal.txt"), refusal)?;
     let mut rows = Vec::new();
-    for delta in [
-        0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 63,
-    ] {
-        let avif = encode(img, delta, zenavif::EncodeChromaSubsampling::Yuv420)?;
-        let name = format!("chroma-{delta:02}.avif");
+    let mut cells: Vec<(f32, i8)> = if a3 {
+        [95., 85., 75., 60.]
+            .into_iter()
+            .flat_map(|q| {
+                [0, 8, 16, 24, 32, 40, 48, 56, 63]
+                    .into_iter()
+                    .map(move |d| (q, d))
+            })
+            .collect()
+    } else {
+        [
+            0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 63,
+        ]
+        .into_iter()
+        .map(|d| (95., d))
+        .collect()
+    };
+    if a3 {
+        for q in [
+            95., 90., 85., 80., 75., 70., 65., 60., 55., 50., 45., 40., 35., 30., 25., 20., 15.,
+            10., 5., 1.,
+        ] {
+            if !cells.contains(&(q, 0)) {
+                cells.push((q, 0));
+            }
+        }
+    }
+    for (quality, delta) in cells {
+        let avif = encode(
+            img,
+            quality,
+            delta,
+            zenavif::EncodeChromaSubsampling::Yuv420,
+        )?;
+        let name = if a3 {
+            format!("q{quality:02.0}-chroma-{delta:02}.avif")
+        } else {
+            format!("chroma-{delta:02}.avif")
+        };
         fs::write(out.join(&name), &avif)?;
-        rows.push(serde_json::json!({"file":name,"bytes":avif.len(),"quality":95,"chroma_q":[delta,delta],"bit_depth":10,"cicp":[9,16,6,true],"source_descriptor":format!("{desc:?}")}));
+        rows.push(serde_json::json!({"file":name,"bytes":avif.len(),"quality":quality,"chroma_q":[delta,delta],"bit_depth":10,"cicp":[9,16,6,true],"source_descriptor":format!("{desc:?}")}));
     }
     fs::write(out.join("encodes.json"), serde_json::to_vec_pretty(&rows)?)?;
     Ok(())
@@ -140,10 +179,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         fs::write(&args[3], pq_png_from_avif(&fs::read(&args[2])?)?)?;
         return Ok(());
     }
+    if args.len() == 4 && args[1] == "a3" {
+        return run(Path::new(&args[2]), Path::new(&args[3]), true);
+    }
     if args.len() != 3 {
         return Err("chroma_hdr INPUT.hdr.png NEW_OUTPUT_DIR".into());
     }
-    run(Path::new(&args[1]), Path::new(&args[2]))
+    run(Path::new(&args[1]), Path::new(&args[2]), false)
 }
 #[cfg(test)]
 mod tests {
@@ -215,9 +257,11 @@ mod tests {
             .map(|i| rgb::Rgb::new((i * 61) as u16, (i * 37) as u16, (i * 17) as u16))
             .collect();
         let img = imgref::ImgRef::new(&samples, 32, 32);
-        let a = encode(img, 0, zenavif::EncodeChromaSubsampling::Yuv420).unwrap();
-        let b = encode(img, 63, zenavif::EncodeChromaSubsampling::Yuv420).unwrap();
+        let a = encode(img, 95.0, 0, zenavif::EncodeChromaSubsampling::Yuv420).unwrap();
+        let b = encode(img, 95.0, 63, zenavif::EncodeChromaSubsampling::Yuv420).unwrap();
         assert_ne!(a, b, "chroma override must affect HBD output");
+        let low = encode(img, 20.0, 0, zenavif::EncodeChromaSubsampling::Yuv420).unwrap();
+        assert_ne!(a, low, "positive-control quality must affect HBD output");
         let png = pq_png_from_avif(&a).unwrap();
         let decoded = zenpng::PngDecoderConfig::new()
             .decode(&png)
@@ -225,7 +269,7 @@ mod tests {
             .into_buffer();
         assert_eq!(decoded.descriptor(), PixelDescriptor::RGB16_BT2100_PQ);
         assert_eq!((decoded.width(), decoded.height()), (32, 32));
-        let err = encode(img, 0, zenavif::EncodeChromaSubsampling::Yuv444).unwrap_err();
+        let err = encode(img, 95.0, 0, zenavif::EncodeChromaSubsampling::Yuv444).unwrap_err();
         assert!(err.contains("only Yuv420 is implemented"), "{err}");
     }
 }
