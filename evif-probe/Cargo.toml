@@ -60,3 +60,7 @@ zenhash = { git = "https://github.com/imazen/zenhash", rev = "7774776d2eb7b27da0
 unsafe_code = "forbid"
 
 [dev-dependencies]
+
+[[example]]
+name = "chroma_hdr"
+required-features = ["possession-svt"]

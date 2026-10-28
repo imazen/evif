@@ -106,3 +106,10 @@ jpegai-models-test models:
 
 shared-pages-check:
     {{heavy}} cargo test --release -p evif --test wire
+
+# Native PQ chroma pilot; deliberately files only until HDR rendition I/O exists.
+chroma-hdr input output:
+    {{heavy}} cargo run --release -p evif-probe --features possession-svt --example chroma_hdr -- {{quote(input)}} {{quote(output)}}
+
+chroma-tools *args:
+    {{heavy}} cargo run --release -p evif-probe --example chroma_tools -- {{args}}
