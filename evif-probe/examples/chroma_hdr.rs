@@ -30,6 +30,47 @@ fn encode(
     .map(|e| e.avif_file)
     .map_err(|e| e.to_string())
 }
+fn pq_png_from_avif(bytes: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    let pixels = zenavif::decode_with(
+        bytes,
+        &zenavif::DecoderConfig::new().threads(1).prefer_8bit(false),
+        &Unstoppable,
+    )?;
+    if pixels.descriptor() != PixelDescriptor::RGB16_BT2100_PQ {
+        return Err(format!(
+            "expected native RGB16 BT.2020 PQ, got {:?}",
+            pixels.descriptor()
+        )
+        .into());
+    }
+    let packed = pixels.copy_to_contiguous_bytes();
+    let samples: Vec<rgb::Rgb<u16>> = packed
+        .as_chunks::<6>()
+        .0
+        .iter()
+        .map(|p| {
+            rgb::Rgb::new(
+                u16::from_ne_bytes([p[0], p[1]]),
+                u16::from_ne_bytes([p[2], p[3]]),
+                u16::from_ne_bytes([p[4], p[5]]),
+            )
+        })
+        .collect();
+    let config =
+        zenpng::EncodeConfig::default().with_cicp(Some(zencodec::Cicp::new(9, 16, 0, true)));
+    let png = zenpng::encode_rgb16(
+        imgref::ImgRef::new(&samples, pixels.width() as usize, pixels.height() as usize),
+        None,
+        &config,
+        &Unstoppable,
+        &Unstoppable,
+    )?;
+    let back = zenpng::PngDecoderConfig::new().decode(&png)?.into_buffer();
+    if back.descriptor() != pixels.descriptor() || back.copy_to_contiguous_bytes() != packed {
+        return Err("AVIF PQ rendition roundtrip changed samples or signaling".into());
+    }
+    Ok(png)
+}
 fn run(input: &Path, out: &Path) -> Result<(), Box<dyn std::error::Error>> {
     fs::create_dir(out)?;
     let decoded = zenpng::PngDecoderConfig::new()
@@ -92,6 +133,13 @@ fn run(input: &Path, out: &Path) -> Result<(), Box<dyn std::error::Error>> {
 }
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<_> = std::env::args().collect();
+    if args.len() == 4 && args[1] == "decode" {
+        if Path::new(&args[3]).exists() {
+            return Err("rendition output already exists".into());
+        }
+        fs::write(&args[3], pq_png_from_avif(&fs::read(&args[2])?)?)?;
+        return Ok(());
+    }
     if args.len() != 3 {
         return Err("chroma_hdr INPUT.hdr.png NEW_OUTPUT_DIR".into());
     }
@@ -170,6 +218,13 @@ mod tests {
         let a = encode(img, 0, zenavif::EncodeChromaSubsampling::Yuv420).unwrap();
         let b = encode(img, 63, zenavif::EncodeChromaSubsampling::Yuv420).unwrap();
         assert_ne!(a, b, "chroma override must affect HBD output");
+        let png = pq_png_from_avif(&a).unwrap();
+        let decoded = zenpng::PngDecoderConfig::new()
+            .decode(&png)
+            .unwrap()
+            .into_buffer();
+        assert_eq!(decoded.descriptor(), PixelDescriptor::RGB16_BT2100_PQ);
+        assert_eq!((decoded.width(), decoded.height()), (32, 32));
         let err = encode(img, 0, zenavif::EncodeChromaSubsampling::Yuv444).unwrap_err();
         assert!(err.contains("only Yuv420 is implemented"), "{err}");
     }

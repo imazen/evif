@@ -4,6 +4,21 @@ use evif_probe::{
     judge::{Judge, Ssim2},
 };
 use std::fs;
+fn crop(im: &Rgb8Image, x: u32, y: u32, w: u32, h: u32) -> Result<Rgb8Image, String> {
+    if w == 0
+        || h == 0
+        || x.checked_add(w).is_none_or(|v| v > im.width)
+        || y.checked_add(h).is_none_or(|v| v > im.height)
+    {
+        return Err("crop must fit source".into());
+    }
+    let mut data = Vec::with_capacity(w as usize * h as usize * 3);
+    for row in y..y + h {
+        let start = row as usize * im.stride() + x as usize * 3;
+        data.extend_from_slice(&im.data[start..start + w as usize * 3]);
+    }
+    Rgb8Image::new(w, h, data)
+}
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let a: Vec<_> = std::env::args().collect();
     match a.get(1).map(String::as_str) {
@@ -42,6 +57,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let pixels = dec.pixels_u8().ok_or("JPEG produced no u8 pixels")?;
             fs::write(&a[3], Rgb8Image::new(w, h, pixels.to_vec())?.to_png()?)?;
         }
+        Some("rect-crop") if a.len() == 8 => {
+            let im = Rgb8Image::from_png(&fs::read(&a[2])?)?;
+            fs::write(
+                &a[3],
+                crop(
+                    &im,
+                    a[4].parse()?,
+                    a[5].parse()?,
+                    a[6].parse()?,
+                    a[7].parse()?,
+                )?
+                .to_png()?,
+            )?;
+        }
         Some("crop") if a.len() == 6 => {
             let im = Rgb8Image::from_png(&fs::read(&a[2])?)?;
             let size: u32 = a[4].parse()?;
@@ -54,12 +83,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 (0, 0)
             };
-            let mut data = Vec::with_capacity(size as usize * size as usize * 3);
-            for row in y..y + size {
-                let start = row as usize * im.stride() + x as usize * 3;
-                data.extend_from_slice(&im.data[start..start + size as usize * 3]);
-            }
-            let cropped = Rgb8Image::new(size, size, data)?;
+            let cropped = crop(&im, x, y, size, size)?;
             fs::write(&a[3], cropped.to_png()?)?;
         }
         Some("ssim") if a.len() == 4 => {

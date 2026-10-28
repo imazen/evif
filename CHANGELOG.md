@@ -78,6 +78,8 @@ All notable changes to this repository. Format: [Keep a Changelog](https://keepa
 ## evif-probe
 
 ### Changed
+- PQ pilot can export exact native AVIF-to-PNG renditions for frozen teachers;
+  chroma transport helpers also support bounded rectangular crops.
 - Native PQ pilot uses the PNG codec decoder to retain the source CICP
   descriptor, with exact RGB16 PNG transport coverage.
 

@@ -246,3 +246,8 @@ adapter accepts 4:2:0 and explicitly refuses 4:4:4; these HDR samples remain
 files because the current render/probe path takes RGB8. `PngDecoderConfig`
 provides the native CICP descriptor; the lower-level PNG pixel output keeps
 that signaling in separate metadata.
+
+`chroma_hdr decode INPUT.avif NEW_OUTPUT.pq.png` uses the pinned native AVIF
+decoder and writes an exact PQ16 PNG rendition, including its CICP. This
+provides a lossless transport to teachers whose frozen ingress accepts PQ
+PNG/JXL rather than AVIF. The original AVIF remains the encoded-cost artifact.
