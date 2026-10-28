@@ -77,7 +77,13 @@ All notable changes to this repository. Format: [Keep a Changelog](https://keepa
 
 ## evif-probe
 
+### Changed
+- Resolve the frozen zensim revision from zensimx after the repository split;
+  the revision and metric implementation stay fixed.
+
 ### Added
+- Raw XYB expert table scaling and digest-bound import of external scores
+  into legacy containers (`79775364`).
 - Opt-in JPEG AI and Cool-chic possession families, with native-byte decoding
   and a documented one-call external codec registry hook (`97c07ad5`).
 - End-to-end injected-family render test (`4632dba0`) and model-backed JPEG AI
