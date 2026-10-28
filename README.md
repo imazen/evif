@@ -256,3 +256,11 @@ The native PQ research example also accepts `a3 INPUT NEW_OUTPUT_DIR` for a
 quality positive control and chroma-delta probes at qualities 95, 85, 75 and
 60. It deduplicates shared quality/delta cells, retains native PQ precision,
 and leaves perceptual labels to the separately pinned teacher.
+
+`render --family union --params FILE.jsonl` accepts explicit
+`{"family":"zenjpeg-expert","params":{...}}` rows across registered families
+and decodes each reference once. `--emit-reference-rgb8` exports that exact
+packed raster for a separately pinned teacher. `score-import-many MANIFEST.json`
+applies the existing digest-bound import contract in one process; each row
+names `input`, `scores`, and a new `output`. Ordinary render/import behavior
+and container bytes remain unchanged.

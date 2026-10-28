@@ -116,3 +116,6 @@ chroma-tools *args:
 
 chroma-hdr-a3 input output:
     {{heavy}} cargo run --release -p evif-probe --features possession-svt --example chroma_hdr -- a3 {{quote(input)}} {{quote(output)}}
+
+render-union-check:
+    {{heavy}} cargo test --release -p evif-probe --test render_union

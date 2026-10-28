@@ -62,6 +62,7 @@ pub fn run(registry: &Registry, args: &[String]) -> Res<()> {
         Some("extract") => extract(registry, &args[1..]),
         Some("repack") => repack(registry, &args[1..]),
         Some("score-import") => score_import(&args[1..]),
+        Some("score-import-many") => score_import_many(&args[1..]),
         Some("list") => list(registry),
         Some("render") => render(registry, &args[1..]),
         _ => Err(USAGE.to_string()),
@@ -639,6 +640,35 @@ fn repack(registry: &Registry, args: &[String]) -> Res<()> {
     )
 }
 
+/// Apply bound score envelopes in one process; the single-file contract is unchanged.
+fn score_import_many(args: &[String]) -> Res<()> {
+    #[derive(serde::Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct Row {
+        input: String,
+        scores: String,
+        output: String,
+    }
+    let [path] = args else {
+        return Err("score-import-many MANIFEST.json".into());
+    };
+    let rows: Vec<Row> = serde_json::from_slice(&fs::read(path).map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())?;
+    if rows.is_empty() {
+        return Err("empty score import manifest".into());
+    }
+    let mut outputs = std::collections::HashSet::new();
+    for r in &rows {
+        if Path::new(&r.output).exists() || !outputs.insert(&r.output) {
+            return Err("output exists or repeats".into());
+        }
+    }
+    for r in rows {
+        score_import(&[r.input, r.scores, r.output])?;
+    }
+    Ok(())
+}
+
 /// Import externally computed scores into a NEW legacy still container. The
 /// caller must bind both exact raster identities, not just a source filename.
 fn score_import(args: &[String]) -> Res<()> {
@@ -703,12 +733,18 @@ fn render(registry: &Registry, args: &[String]) -> Res<()> {
     let mut format = "png".to_string();
     let mut reference_format = RenditionFormat::Png;
     let mut omit_bits = false;
+    let mut emit_reference_rgb8 = false;
     let mut i = 0;
     while i < args.len() {
         let next = |i: usize| args.get(i + 1).cloned().ok_or_else(|| USAGE.to_string());
         match args[i].as_str() {
             "--format" => format = next(i)?,
             "--rendition" => reference_format = rendition::parse(&next(i)?)?,
+            "--emit-reference-rgb8" => {
+                emit_reference_rgb8 = true;
+                i += 1;
+                continue;
+            }
             "--omit-bits" => {
                 omit_bits = true;
                 i += 1;
@@ -730,9 +766,15 @@ fn render(registry: &Registry, args: &[String]) -> Res<()> {
     let (Some(family), Some(out)) = (family, out) else {
         return Err(USAGE.to_string());
     };
-    let fam = registry
-        .family(&family)
-        .ok_or_else(|| format!("unknown family {family}"))?;
+    let fam = if family == "union" {
+        None
+    } else {
+        Some(
+            registry
+                .family(&family)
+                .ok_or_else(|| format!("unknown family {family}"))?,
+        )
+    };
     match format.as_str() {
         "png" | "imij" => {
             let f = rendition::parse(&format)?;
@@ -754,15 +796,17 @@ fn render(registry: &Registry, args: &[String]) -> Res<()> {
     if images.is_empty() {
         return Err("no images given".into());
     }
-    let mut jobs: Vec<(String, Value)> = Vec::new();
+    let mut jobs: Vec<(String, String, Value)> = Vec::new();
     match (qualities, params_file) {
         (Some(q), None) => {
             for v in q.split(',') {
                 let q: f64 = v.trim().parse().map_err(|_| format!("bad quality {v}"))?;
                 let p = fam
+                    .as_ref()
+                    .ok_or("union render requires explicit params")?
                     .baseline(q)
                     .ok_or_else(|| format!("{family} has no baseline"))?;
-                jobs.push((format!("q{q:05.1}"), p));
+                jobs.push((format!("q{q:05.1}"), family.clone(), p));
             }
         }
         (None, Some(f)) => {
@@ -770,7 +814,19 @@ fn render(registry: &Registry, args: &[String]) -> Res<()> {
             for (n, line) in text.lines().filter(|l| !l.trim().is_empty()).enumerate() {
                 let p: Value = serde_json::from_str(line)
                     .map_err(|e| format!("params line {}: {e}", n + 1))?;
-                jobs.push((format!("p{n:04}"), p));
+                if family == "union" {
+                    let name = p["family"]
+                        .as_str()
+                        .ok_or("union row needs family")?
+                        .to_string();
+                    if registry.family(&name).is_none() {
+                        return Err(format!("unknown union family {name}"));
+                    }
+                    let params = p.get("params").ok_or("union row needs params")?.clone();
+                    jobs.push((format!("p{n:04}"), name, params));
+                } else {
+                    jobs.push((format!("p{n:04}"), family.clone(), p));
+                }
             }
         }
         _ => return Err(USAGE.to_string()),
@@ -813,8 +869,12 @@ fn render(registry: &Registry, args: &[String]) -> Res<()> {
             .unwrap_or_default();
         let bytes = fs::read(img_path).map_err(|e| format!("{}: {e}", img_path.display()))?;
         let reference = Rgb8Image::from_png(&bytes).map_err(|e| format!("{id}: {e}"))?;
-        for (tag, p) in &jobs {
-            let enc = match fam.encode(p, &reference) {
+        if emit_reference_rgb8 {
+            write_new(&out.join(format!("{id}.reference.rgb8")), &reference.data)?;
+        }
+        for (tag, family_name, p) in &jobs {
+            let selected = registry.family(family_name).ok_or("union family absent")?;
+            let enc = match selected.encode(p, &reference) {
                 Ok(e) => e,
                 Err(e) => {
                     eprintln!("{id} {tag}: refused: {e}");
@@ -841,7 +901,7 @@ fn render(registry: &Registry, args: &[String]) -> Res<()> {
                         disagreement: None,
                     };
                     let mut file =
-                        write::build(fam.as_ref(), &reference, &id, None, &sample, &enc)?;
+                        write::build(selected.as_ref(), &reference, &id, None, &sample, &enc)?;
                     rendition::configure(registry, &mut file, reference_format, omit_bits)?;
                     ("evif".into(), file.to_bytes().map_err(|e| e.to_string())?)
                 }
