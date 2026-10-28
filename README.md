@@ -237,3 +237,12 @@ constraint (sharpening, grain, hue, sub-pixel shift); a human-judgment loop.
 
 `evif` is dual-licensed under MIT and Apache-2.0. `evif-probe` is AGPL-3.0-only or
 the Imazen commercial license (see `evif-probe/LICENSE-*`).
+
+The research `chroma_hdr` example accepts native RGB16 PQ PNG, converts the
+signaled primaries to BT.2020 with zenpixels-convert, and writes 10-bit SVT
+AVIF chroma-delta ladders at fixed luma quality. Use `just chroma-hdr INPUT
+NEW_OUTPUT_DIR` with `HEAVY` set to the resource wrapper. The pinned SVT still
+adapter accepts 4:2:0 and explicitly refuses 4:4:4; these HDR samples remain
+files because the current render/probe path takes RGB8. `PngDecoderConfig`
+provides the native CICP descriptor; the lower-level PNG pixel output keeps
+that signaling in separate metadata.

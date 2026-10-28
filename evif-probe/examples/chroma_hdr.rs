@@ -32,20 +32,18 @@ fn encode(
 }
 fn run(input: &Path, out: &Path) -> Result<(), Box<dyn std::error::Error>> {
     fs::create_dir(out)?;
-    let decoded = zenpng::decode(
-        &fs::read(input)?,
-        &zenpng::PngDecodeConfig::default(),
-        &Unstoppable,
-    )?;
-    let desc = decoded.pixels.descriptor();
-    if desc.transfer() != TransferFunction::Pq
-        || decoded.pixels.width() as u64 * decoded.pixels.height() as u64 >= 1_000_000
+    let decoded = zenpng::PngDecoderConfig::new()
+        .decode(&fs::read(input)?)?
+        .into_buffer();
+    let desc = decoded.descriptor();
+    if desc.channel_type() != zenpixels_convert::ChannelType::U16
+        || desc.layout() != zenpixels_convert::ChannelLayout::Rgb
+        || desc.transfer() != TransferFunction::Pq
+        || decoded.width() as u64 * decoded.height() as u64 >= 1_000_000
     {
         return Err("input must be native PQ below 1MP".into());
     }
-    let converted = decoded
-        .pixels
-        .convert_to(PixelDescriptor::RGB16_BT2100_PQ)?;
+    let converted = decoded.convert_to(PixelDescriptor::RGB16_BT2100_PQ)?;
     let bytes = converted.copy_to_contiguous_bytes();
     let samples: Vec<rgb::Rgb<u16>> = bytes
         .as_chunks::<6>()
@@ -67,14 +65,10 @@ fn run(input: &Path, out: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let png_config =
         zenpng::EncodeConfig::default().with_cicp(Some(zencodec::Cicp::new(9, 16, 0, true)));
     let reference = zenpng::encode_rgb16(img, None, &png_config, &Unstoppable, &Unstoppable)?;
-    let back = zenpng::decode(
-        &reference,
-        &zenpng::PngDecodeConfig::default(),
-        &Unstoppable,
-    )?;
-    if back.pixels.copy_to_contiguous_bytes() != bytes
-        || back.pixels.descriptor() != converted.descriptor()
-    {
+    let back = zenpng::PngDecoderConfig::new()
+        .decode(&reference)?
+        .into_buffer();
+    if back.copy_to_contiguous_bytes() != bytes || back.descriptor() != converted.descriptor() {
         return Err("PQ reference PNG roundtrip changed samples/signaling".into());
     }
     fs::write(out.join("reference-bt2020-pq.png"), reference)?;
@@ -106,6 +100,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn pq_png_decode_preserves_native_samples_and_cicp() {
+        let values = vec![
+            rgb::Rgb::new(32768u16, 2047, 19),
+            rgb::Rgb::new(10001, 12345, 65500),
+        ];
+        let config =
+            zenpng::EncodeConfig::default().with_cicp(Some(zencodec::Cicp::new(1, 16, 0, true)));
+        let png = zenpng::encode_rgb16(
+            imgref::ImgRef::new(&values, 2, 1),
+            None,
+            &config,
+            &Unstoppable,
+            &Unstoppable,
+        )
+        .unwrap();
+        let back = zenpng::PngDecoderConfig::new()
+            .decode(&png)
+            .unwrap()
+            .into_buffer();
+        assert_eq!(back.descriptor().transfer(), TransferFunction::Pq);
+        assert_eq!(
+            back.descriptor().primaries,
+            zenpixels_convert::ColorPrimaries::Bt709
+        );
+        let expected: Vec<u8> = values
+            .iter()
+            .flat_map(|p| [p.r, p.g, p.b])
+            .flat_map(u16::to_ne_bytes)
+            .collect();
+        assert_eq!(back.copy_to_contiguous_bytes(), expected);
+    }
     #[test]
     fn pq_primary_conversion_changes_samples_without_eight_bit_narrowing() {
         use zenpixels_convert::{ColorPrimaries, PixelBuffer};

@@ -78,10 +78,14 @@ All notable changes to this repository. Format: [Keep a Changelog](https://keepa
 ## evif-probe
 
 ### Changed
+- Native PQ pilot uses the PNG codec decoder to retain the source CICP
+  descriptor, with exact RGB16 PNG transport coverage.
+
 - Resolve the frozen zensim revision from zensimx after the repository split;
   the revision and metric implementation stay fixed.
 
 ### Added
+- Native PQ SVT chroma pilot and exact score/media read-back helpers (`a78d5490`).
 - Raw XYB expert table scaling and digest-bound import of external scores
   into legacy containers (`79775364`).
 - Opt-in JPEG AI and Cool-chic possession families, with native-byte decoding
