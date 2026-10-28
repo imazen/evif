@@ -109,6 +109,92 @@ fn zenjpeg_expert_round_trip() {
 }
 
 #[test]
+fn xyb_expert_params_round_trip_and_legacy_defaults() {
+    use family::zenjpeg_expert::Params;
+    let quant_scale = [[1.0; 4]; 3];
+    let zero_bias_scale = [1.0; 3];
+    let old = serde_json::json!({"quality":95.0,"subsampling":"s420",
+        "quant_scale":quant_scale,"zero_bias_scale":zero_bias_scale,
+        "adaptive_quant":true,"deringing":false,"trellis":false});
+    let p: Params = serde_json::from_value(old.clone()).unwrap();
+    assert!(!p.xyb);
+    assert!(p.xyb_b_quarter);
+    assert_eq!(serde_json::to_value(p).unwrap(), old);
+    let mut p = Params::baseline(95.0);
+    p.xyb = true;
+    p.xyb_b_quarter = false;
+    p.quant_scale[0] = [32.0; 4];
+    p.quant_scale[2] = [64.0; 4];
+    assert_eq!(
+        serde_json::from_value::<Params>(serde_json::to_value(&p).unwrap()).unwrap(),
+        p
+    );
+}
+
+#[test]
+fn xyb_expert_unit_scales_equal_default_encoder_bytes() {
+    use enough::Unstoppable;
+    use family::zenjpeg_expert::Params;
+    use zenjpeg::encoder::{EncoderConfig, PixelLayout, XybSubsampling};
+    let r = reference();
+    let f = Registry::builtin().family("zenjpeg-expert").unwrap();
+    for quality in [45.0, 75.0, 95.0] {
+        for quarter in [false, true] {
+            let mut p = Params::baseline(quality);
+            p.xyb = true;
+            p.xyb_b_quarter = quarter;
+            p.deringing = true; // Match the actual EncoderConfig::xyb defaults.
+            let actual = f.encode(&serde_json::to_value(p).unwrap(), &r).unwrap();
+            let config = EncoderConfig::xyb(
+                quality as f32,
+                if quarter {
+                    XybSubsampling::BQuarter
+                } else {
+                    XybSubsampling::Full
+                },
+            );
+            let mut encoder = config
+                .encode_from_bytes(r.width, r.height, PixelLayout::Rgb8Srgb)
+                .unwrap();
+            encoder.push_packed(&r.data, Unstoppable).unwrap();
+            assert_eq!(
+                actual.bits.unwrap().data,
+                encoder.finish().unwrap(),
+                "q{quality} quarter={quarter}: raw XYB tables reproduce default encoder"
+            );
+        }
+    }
+}
+
+#[test]
+fn xyb_expert_chroma_scales_reduce_bytes_beyond_builder_cap() {
+    use family::zenjpeg_expert::Params;
+    let r = reference();
+    let f = Registry::builtin().family("zenjpeg-expert").unwrap();
+    let mut sizes = Vec::new();
+    for multiplier in [1.0, 4.0, 16.0, 64.0] {
+        let mut p = Params::baseline(95.0);
+        p.xyb = true;
+        p.quant_scale[0] = [multiplier; 4];
+        p.quant_scale[2] = [multiplier; 4];
+        let encoded = f.encode(&serde_json::to_value(p).unwrap(), &r).unwrap();
+        assert_eq!(
+            (encoded.pixels.width, encoded.pixels.height),
+            (r.width, r.height)
+        );
+        sizes.push(encoded.bytes().unwrap());
+    }
+    assert!(
+        sizes.windows(2).all(|p| p[1] <= p[0]),
+        "nonincreasing bytes: {sizes:?}"
+    );
+    assert!(
+        sizes.last().unwrap() < sizes.first().unwrap(),
+        "distinct chroma damage: {sizes:?}"
+    );
+}
+
+#[test]
 fn corruption_round_trip() {
     let reference = reference();
     let fam = Registry::builtin().family("corruption").unwrap();

@@ -28,6 +28,7 @@ evif: stress-test image quality metrics with a self-reporting container
   evif verify  FILE.evif...        check SEAL, reference decode and pixel digest
   evif extract FILE.evif DIR [--format png|imij|native|evif] [--omit-bits]
   evif repack INPUT.evif OUTPUT.evif [--rendition png|imij] [--omit-bits]
+  evif score-import INPUT.evif SCORES.json OUTPUT.evif   import bound external scores
   evif render  --family F --out DIR (--qualities 5,10,... | --params FILE.jsonl)
                [--format png|imij|native|evif] [--rendition png|imij] [--omit-bits]
                IMAGE.png...        encode with a family and record DIR/render.tsv
@@ -60,6 +61,7 @@ pub fn run(registry: &Registry, args: &[String]) -> Res<()> {
         Some("verify") => verify(registry, &args[1..]),
         Some("extract") => extract(registry, &args[1..]),
         Some("repack") => repack(registry, &args[1..]),
+        Some("score-import") => score_import(&args[1..]),
         Some("list") => list(registry),
         Some("render") => render(registry, &args[1..]),
         _ => Err(USAGE.to_string()),
@@ -540,6 +542,14 @@ fn extract(registry: &Registry, args: &[String]) -> Res<()> {
         )?;
         println!("{}", p.display());
     }
+    let digests = serde_json::json!({
+        "reference_digest": f.digests.reference.map(|d| format!("{d:016x}")),
+        "distorted_digest": format!("{:016x}", f.digests.distorted),
+    });
+    write_new(
+        &dir.join(format!("{stem}.digests.json")),
+        &serde_json::to_vec_pretty(&digests).map_err(|e| e.to_string())?,
+    )?;
     Ok(())
 }
 
@@ -622,6 +632,60 @@ fn repack(registry: &Registry, args: &[String]) -> Res<()> {
         rendition::configure(registry, &mut file, rendition::parse(&format)?, omit)?;
     } else if omit {
         file.omit_bits();
+    }
+    write_new(
+        Path::new(output),
+        &file.to_bytes().map_err(|e| e.to_string())?,
+    )
+}
+
+/// Import externally computed scores into a NEW legacy still container. The
+/// caller must bind both exact raster identities, not just a source filename.
+fn score_import(args: &[String]) -> Res<()> {
+    #[derive(serde::Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct Import {
+        reference_digest: String,
+        distorted_digest: String,
+        scores: Vec<evif::Score>,
+    }
+    let [input, scores, output] = args else {
+        return Err("score-import INPUT.evif SCORES.json OUTPUT.evif".into());
+    };
+    if Path::new(output).exists() {
+        return Err("output already exists; use a new path".into());
+    }
+    let mut file = read(Path::new(input))?;
+    let bytes = fs::read(scores).map_err(|e| format!("{scores}: {e}"))?;
+    let import: Import = serde_json::from_slice(&bytes).map_err(|e| format!("scores: {e}"))?;
+    if import.reference_digest
+        != format!(
+            "{:016x}",
+            file.digests.reference.ok_or("reference digest absent")?
+        )
+        || import.distorted_digest != format!("{:016x}", file.digests.distorted)
+    {
+        return Err("external scores do not bind this exact reference/candidate pair".into());
+    }
+    if import.scores.is_empty()
+        || import.scores.iter().any(|score| {
+            !score.value.is_finite()
+                || score.metric.is_empty()
+                || score.implementation.as_ref().is_none_or(String::is_empty)
+        })
+    {
+        return Err("import requires finite scores with metric and implementation pins".into());
+    }
+    let stored = file.scores.get_or_insert_with(evif::Scores::default);
+    for score in import.scores {
+        if stored
+            .scores
+            .iter()
+            .any(|old| old.key() == score.key() && old.implementation == score.implementation)
+        {
+            return Err("score from this metric implementation already exists".into());
+        }
+        stored.scores.push(score);
     }
     write_new(
         Path::new(output),

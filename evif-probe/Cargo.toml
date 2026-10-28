@@ -35,7 +35,9 @@ zenpixels = { version = "0.2.16", default-features = false, optional = true }
 evif = { path = "../evif" }
 # Codecs and metrics are pinned to main revisions; `src/pins.rs` records the
 # same revisions for the `scor` and `knob` chunks. Update both together.
-zenjpeg = { git = "https://github.com/imazen/zenjpeg", rev = "a2a128ab0bc36f01338225f61c285f462ae67ca6" }
+# The research probe needs the pinned raw XYB table constructors, exposed by
+# this existing instrumentation feature. No codec algorithm is substituted.
+zenjpeg = { git = "https://github.com/imazen/zenjpeg", rev = "a2a128ab0bc36f01338225f61c285f462ae67ca6", features = ["__test-utils"] }
 zenpng = { git = "https://github.com/imazen/zenpng", rev = "2802f8ee9ae5444b61c4b8f9da51645365bb1fd5", default-features = false, features = ["quantize"] }
 zensim = { git = "https://github.com/imazen/zensim", rev = "2b84071712ef86bc95f7fdfc0b14b7ee14d2aaeb" }
 fast-ssim2 = { git = "https://github.com/imazen/fast-ssim2", rev = "54fabca919230767ba0944cbec0a37d7eb3a2a7a" }

@@ -202,6 +202,23 @@ Adding a codec needs one `Family` implementation and one `Registry::add_family`
 call; the search and output paths do not change. See the
 [injection guide](docs/codec-injection.md).
 
+Explicit `zenjpeg-expert` vectors may set `"xyb": true` and
+`"xyb_b_quarter": true` (the latter defaults to true). Component order is
+then X/Y/B: hold `quant_scale[1]` fixed and vary components 0 and 2 for
+chroma-only ladders. These raw table multipliers can exceed the color
+builder's 5× distance cap. Unit multipliers reproduce the default XYB
+encoder with matching quality, subsampling and flags.
+
+`render --format evif` currently writes legacy still containers. Import an
+external teacher into a new file with
+`evif score-import INPUT.evif SCORES.json OUTPUT.evif`. The JSON contains
+`reference_digest` and `distorted_digest` as 16-digit lowercase hex strings,
+plus a `scores` array of versioned metric records. `extract` writes a
+`.digests.json` sidecar with both bindings. Imports require finite values
+and nonempty implementation pins, retain existing scores and media, and
+refuse mismatched pairs, duplicate implementations and existing outputs.
+`wire append` remains the major-1 operation.
+
 Build with `--features possession` for AV1, JPEG XL, JPEG AI and Cool-chic, or
 select only the `possession-svt`, `possession-jxl`, `possession-jpegai` or
 `possession-coolchic` feature. See [controls, replay and limits](docs/possession.md).

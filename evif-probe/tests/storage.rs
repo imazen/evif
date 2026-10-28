@@ -15,6 +15,91 @@ fn run(reg: &Registry, args: &[&str]) -> Result<(), String> {
 fn image() -> Rgb8Image {
     Rgb8Image::new(64, 64, (0..64 * 64 * 3).map(|i| (i * 7) as u8).collect()).unwrap()
 }
+
+#[test]
+fn import_teacher_scores_binds_pixels_and_preserves_media_and_prior_scores() {
+    let reg = Registry::builtin();
+    let root = root("teacher");
+    let img = image();
+    let mut file = Evif::new(img.header(), img.to_png().unwrap(), img.digest());
+    file.digests.reference = Some(img.digest());
+    file.bits = Some(Bitstream {
+        codec: *b"jpeg",
+        data: vec![1, 2, 3],
+    });
+    file.recipe = Some(evif::Recipe::new(
+        "preserved",
+        serde_json::json!({"xyb":true}),
+    ));
+    file.scores = Some(evif::Scores::new(vec![evif::Score::new(
+        "diagnostic",
+        5.0,
+        evif::Better::Higher,
+    )]));
+    let input = root.join("original.evif");
+    let output = root.join("labelled.evif");
+    let scores = root.join("teacher.json");
+    let original = file.to_bytes().unwrap();
+    fs::write(&input, &original).unwrap();
+    let score = evif::Score::new("ssim2/teacher", -1.2345678901234567, evif::Better::Higher)
+        .implementation("frozen-teacher-sha256");
+    let envelope = serde_json::json!({"reference_digest":format!("{:016x}", img.digest()),
+        "distorted_digest":format!("{:016x}", img.digest()),"scores":[score]});
+    fs::write(&scores, envelope.to_string()).unwrap();
+    run(
+        &reg,
+        &[
+            "score-import",
+            input.to_str().unwrap(),
+            scores.to_str().unwrap(),
+            output.to_str().unwrap(),
+        ],
+    )
+    .unwrap();
+    assert_eq!(fs::read(&input).unwrap(), original);
+    let back = Evif::from_bytes(&fs::read(&output).unwrap()).unwrap();
+    assert_eq!(back.bits, file.bits);
+    assert_eq!(back.rendition, file.rendition);
+    assert_eq!(back.digests, file.digests);
+    assert_eq!(back.recipe, file.recipe);
+    let stored = back.scores.unwrap();
+    assert_eq!(stored.scores[0], file.scores.unwrap().scores[0]);
+    assert_eq!(
+        stored.scores[1].value.to_bits(),
+        (-1.2345678901234567f64).to_bits()
+    );
+    let before = fs::read(&output).unwrap();
+    assert!(
+        run(
+            &reg,
+            &[
+                "score-import",
+                input.to_str().unwrap(),
+                scores.to_str().unwrap(),
+                output.to_str().unwrap()
+            ]
+        )
+        .is_err()
+    );
+    assert_eq!(fs::read(&output).unwrap(), before);
+    let mut wrong = envelope;
+    wrong["distorted_digest"] = serde_json::json!("0000000000000000");
+    fs::write(&scores, wrong.to_string()).unwrap();
+    let refused = root.join("refused.evif");
+    assert!(
+        run(
+            &reg,
+            &[
+                "score-import",
+                input.to_str().unwrap(),
+                scores.to_str().unwrap(),
+                refused.to_str().unwrap()
+            ]
+        )
+        .is_err()
+    );
+    assert!(!refused.exists());
+}
 #[test]
 fn repack_omits_only_candidate_and_native_export_refuses_absence() {
     let reg = Registry::builtin();

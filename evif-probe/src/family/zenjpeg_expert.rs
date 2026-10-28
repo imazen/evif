@@ -9,7 +9,8 @@ use enough::Unstoppable;
 use evif::Bitstream;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use zenjpeg::encoder::{ChromaSubsampling, ColorMode, ExpertConfig, PixelLayout};
+use zenjpeg::encode::tuning::EncodingTables;
+use zenjpeg::encoder::{ChromaSubsampling, ColorMode, ExpertConfig, PixelLayout, XybSubsampling};
 
 use super::{Encoded, Family, Subsampling, decode_jpeg};
 use crate::image::Rgb8Image;
@@ -30,6 +31,22 @@ pub struct Params {
     pub adaptive_quant: bool,
     pub deringing: bool,
     pub trellis: bool,
+    /// Raw XYB tables instead of YCbCr; component order becomes X/Y/B.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub xyb: bool,
+    /// XYB's B plane only. Ignored for YCbCr; defaults to quarter resolution.
+    #[serde(default = "yes", skip_serializing_if = "is_true")]
+    pub xyb_b_quarter: bool,
+}
+
+fn yes() -> bool {
+    true
+}
+fn is_false(value: &bool) -> bool {
+    !value
+}
+fn is_true(value: &bool) -> bool {
+    *value
 }
 
 impl Params {
@@ -43,6 +60,8 @@ impl Params {
             adaptive_quant: true,
             deringing: false,
             trellis: false,
+            xyb: false,
+            xyb_b_quarter: true,
         }
     }
 }
@@ -118,7 +137,35 @@ impl Family for ZenjpegExpert {
     fn encode(&self, params: &Value, reference: &Rgb8Image) -> Res<Encoded> {
         let p: Params =
             serde_json::from_value(params.clone()).map_err(|e| format!("params: {e}"))?;
+        if !(0.0..=100.0).contains(&p.quality)
+            || p.quant_scale
+                .iter()
+                .flatten()
+                .chain(p.zero_bias_scale.iter())
+                .any(|v| !v.is_finite() || *v < 0.0)
+        {
+            return Err(
+                "expert quality/scales must be finite and nonnegative; quality is 0..=100".into(),
+            );
+        }
         let mut x = ExpertConfig::default_ycbcr(p.quality as f32);
+        let color = if p.xyb {
+            x.tables = EncodingTables::default_xyb();
+            x.zero_bias_hq = EncodingTables::xyb_hq_zero_bias_mul();
+            x.zero_bias_lq = EncodingTables::xyb_lq_zero_bias_mul();
+            x.blend_zero_bias();
+            ColorMode::Xyb {
+                subsampling: if p.xyb_b_quarter {
+                    XybSubsampling::BQuarter
+                } else {
+                    XybSubsampling::Full
+                },
+            }
+        } else {
+            ColorMode::YCbCr {
+                subsampling: subsampling(p.subsampling),
+            }
+        };
         for (c, comp) in [
             &mut x.tables.quant.c0,
             &mut x.tables.quant.c1,
@@ -146,9 +193,7 @@ impl Family for ZenjpegExpert {
         x.aq_enabled = p.adaptive_quant;
         x.deringing = p.deringing;
         x.trellis_enabled = p.trellis;
-        let config = x.to_encoder_config(ColorMode::YCbCr {
-            subsampling: subsampling(p.subsampling),
-        });
+        let config = x.to_encoder_config(color);
 
         let mut enc = config
             .encode_from_bytes(reference.width, reference.height, PixelLayout::Rgb8Srgb)
