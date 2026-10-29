@@ -40,6 +40,12 @@ adversarial-verify output ffmpeg jobs='1':
 adversarial-archive run archive models binary binary_sha:
     PYTHONDONTWRITEBYTECODE=1 {{heavy}} python3 tools/adversarial_archive.py '{{run}}' '{{archive}}' --models '{{models}}' --binary '{{binary}}' --binary-sha256 '{{binary_sha}}'
 
+adversarial-local-mirror-check archive receipt mirror output:
+    {{heavy}} python3 tools/adversarial_mirror.py '{{archive}}' '{{receipt}}' '{{output}}' --local-mirror '{{mirror}}'
+
+adversarial-r2-mirror-check archive receipt signed_url_file output:
+    {{heavy}} python3 tools/adversarial_mirror.py '{{archive}}' '{{receipt}}' '{{output}}' --signed-url-file '{{signed_url_file}}'
+
 build:
     {{heavy}} cargo build --release
 

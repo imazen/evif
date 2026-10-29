@@ -98,6 +98,13 @@ observed binary SHA256; `--binary-commit` and `--tool-commit` record the exact
 landed source cuts. Archive receipts include the archive size/SHA256 and manifest
 SHA256 for subsequent tower/R2 mirror checks.
 
+`tools/adversarial_mirror.py` checks those same three archive members through
+exact byte ranges. A local mirror also receives a full-archive SHA256 check;
+a signed HTTPS mirror must return HTTP206, the exact range/total size, matching
+SHA256 metadata and matching sampled bytes. Remote verification does not claim
+a full remote-payload SHA256 calculation. Signed URLs stay in private files and
+are omitted from the resulting receipt. Every check writes a fresh receipt.
+
 When staging a worker build, use `just adversarial-stage HOST DIRECTORY`.
 Preserving an older source timestamp can hide an edit from Cargo if the copy
 lands during compilation. The pilot smoke refused such a stale binary before
