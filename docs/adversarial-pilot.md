@@ -70,3 +70,14 @@ after every arm completes. Encode errors fail rather than drawing replacements
 outside the budget. Preserve incomplete outputs; interrupted timings are invalid.
 This local single-process command does not implement a fleet scheduler;
 distributed execution belongs in zenfleet.
+
+`tools/adversarial_summary.py` writes separate `TRAINING-LEG.jsonl` and
+`GAUNTLET.jsonl` find indexes, deduplicated by source/view/encoded SHA256, and
+`PARTITIONS.json` reserves every source. Counts still use each arm's full
+encode budget. Pass `--output NEW_DIRECTORY` to repeat a summary without
+replacing an earlier receipt.
+
+When staging a worker build, use `just adversarial-stage HOST DIRECTORY`.
+Preserving an older source timestamp can hide an edit from Cargo if the copy
+lands during compilation. The pilot smoke refused such a stale binary before
+encoding; a forced fresh build passed the manifest, golden and teacher gates.
