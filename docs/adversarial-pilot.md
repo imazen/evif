@@ -88,6 +88,16 @@ It also extracts the unchanged candidate bytes to
 and independently decodes those persisted files. The scored EVIF remains the
 authoritative reference/candidate evaluation.
 
+After readback and summary, `tools/adversarial_archive.py` authenticates every
+EVIF, native codec artifact and map against those receipts, checks source
+reservations, and retains the exact reference PNGs, served models, executable
+and archive/readback tools. It writes a per-file SHA256 manifest and an
+uncompressed tar outside the run tree, then verifies three reproducibly sampled
+files from the tar. Existing seals and archives are never replaced. Supply the
+observed binary SHA256; `--binary-commit` and `--tool-commit` record the exact
+landed source cuts. Archive receipts include the archive size/SHA256 and manifest
+SHA256 for subsequent tower/R2 mirror checks.
+
 When staging a worker build, use `just adversarial-stage HOST DIRECTORY`.
 Preserving an older source timestamp can hide an edit from Cargo if the copy
 lands during compilation. The pilot smoke refused such a stale binary before

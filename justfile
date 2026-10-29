@@ -37,6 +37,9 @@ adversarial-summary output:
 adversarial-verify output ffmpeg jobs='1':
     {{heavy}} python3 tools/adversarial_verify.py '{{output}}' --ffmpeg '{{ffmpeg}}' --evif target/release/evif --jobs '{{jobs}}'
 
+adversarial-archive run archive models binary binary_sha:
+    PYTHONDONTWRITEBYTECODE=1 {{heavy}} python3 tools/adversarial_archive.py '{{run}}' '{{archive}}' --models '{{models}}' --binary '{{binary}}' --binary-sha256 '{{binary_sha}}'
+
 build:
     {{heavy}} cargo build --release
 
