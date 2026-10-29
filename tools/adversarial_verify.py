@@ -39,11 +39,15 @@ def chunks(data):
 
 
 def decode(binary, data):
-    cmd = [str(binary), "-nostdin", "-v", "error", "-threads", "1", "-i", "pipe:0",
+    # ISO BMFF demuxing can seek after probing. Decode retained native files
+    # directly; PNG renditions remain safe to feed through the in-memory pipe.
+    file_input = isinstance(data, Path)
+    source = str(data) if file_input else "pipe:0"
+    cmd = [str(binary), "-nostdin", "-v", "error", "-threads", "1", "-i", source,
            "-frames:v", "1", "-threads", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"]
-    r = subprocess.run(cmd, input=data, capture_output=True, check=False)
+    r = subprocess.run(cmd, input=None if file_input else data, capture_output=True, check=False)
     if r.returncode:
-        raise ValueError(r.stderr.decode(errors="replace"))
+        raise ValueError(f"{source}: {r.stderr.decode(errors='replace')}")
     return r.stdout
 
 
@@ -73,7 +77,7 @@ def verify_one(path, root, ffmpeg, references, ledger):
     rendition = decode(ffmpeg, c[b"PNGF"])
     if len(rendition) != width * height * 3:
         raise ValueError("rendition geometry differs")
-    decoded = decode(ffmpeg, artifact.read_bytes())
+    decoded = decode(ffmpeg, artifact)
     if len(decoded) != len(rendition):
         raise ValueError("candidate bitstream geometry differs")
     stored = json.loads(c[b"scor"])
@@ -133,9 +137,15 @@ def main():
         for offset in range(0, len(files), 64):
             subprocess.run([str(a.evif), "verify", *map(str, files[offset:offset+64])],
                            stdout=native_log, stderr=subprocess.STDOUT, check=True)
+    def audit(path):
+        try:
+            return verify_one(path, root, a.ffmpeg, references, ledger)
+        except Exception as e:
+            raise ValueError(f"{path.relative_to(root)}: {e}") from e
+
     with ThreadPoolExecutor(max_workers=a.jobs) as executor:
         for i, row in enumerate(executor.map(
-                lambda path: verify_one(path, root, a.ffmpeg, references, ledger), files)):
+                audit, files)):
             rows.append(row)
             unique.add(row["encoded_sha256"])
             if (i+1) % 128 == 0 or i+1 == len(files):

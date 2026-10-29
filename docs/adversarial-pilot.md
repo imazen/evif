@@ -111,3 +111,11 @@ When staging a worker build, use `just adversarial-stage HOST DIRECTORY`.
 Preserving an older source timestamp can hide an edit from Cargo if the copy
 lands during compilation. The pilot smoke refused such a stale binary before
 encoding; a forced fresh build passed the manifest, golden and teacher gates.
+
+Native codec readback uses seekable CAS file input. The pinned FFmpeg demuxer
+refuses a 71,636-byte pilot AVIF through stdin after probing (partial file at
+offset 0x106), while the same SHA256 bytes decode successfully from their CAS
+path to the expected 512×512 RGB24 raster. PNG renditions still use stdin.
+The failed first full audit is retained; repeated audits use a fresh output
+directory and keep every existing check. This changes input transport, not
+encoded bytes or the independent decoder.
