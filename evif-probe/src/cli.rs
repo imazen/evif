@@ -55,6 +55,8 @@ pub fn main(registry: &Registry) -> ! {
 
 pub fn run(registry: &Registry, args: &[String]) -> Res<()> {
     match args.first().map(String::as_str) {
+        #[cfg(feature = "adversarial")]
+        Some("adversarial") => crate::adversarial::run(registry, &args[1..]),
         Some("wire") => crate::wire_cli::run(&args[1..]),
         Some("probe") => probe(registry, &args[1..]),
         Some("inspect") => inspect(&args[1..]),

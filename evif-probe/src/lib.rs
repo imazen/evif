@@ -17,4 +17,8 @@ pub mod write;
 /// Errors here are reported to a person running the CLI, so a message is
 /// enough.
 pub type Res<T> = Result<T, String>;
+#[cfg(feature = "adversarial")]
+mod adversarial;
+#[cfg(feature = "adversarial")]
+mod adversarial_judges;
 mod wire_cli;

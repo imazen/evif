@@ -14,6 +14,9 @@ path = "src/main.rs"
 
 [features]
 default = []
+adversarial = ["dep:zensim-research", "dep:ssim2-frozen", "dep:sha2"]
+# Caller-controlled test gate: both exact external model files are mandatory.
+adversarial-models-test = ["adversarial"]
 # Larger experimental codec dependencies; the container remains unchanged.
 possession = ["possession-svt", "possession-jxl", "possession-jpegai", "possession-coolchic"]
 possession-svt = ["dep:zenavif", "dep:almost-enough"]
@@ -24,6 +27,9 @@ possession-coolchic = ["dep:zencoolchic", "dep:zenpixels"]
 jpegai-models-test = ["possession-jpegai"]
 
 [dependencies]
+zensim-research = { package = "zensim", git = "https://github.com/imazen/zensimx", rev = "a4a00e250b89c1217a110100f16c6b1e1ef2f929", default-features = false, features = ["avx512", "imgref", "feature-regime-v2", "custom-profiles"], optional = true }
+# Exact published source: VCS b7c2b4b33f3a26b753caabd5264a7fef9c4f4545.
+ssim2-frozen = { package = "fast-ssim2", version = "=0.8.2", features = ["imgref", "hdr-pu"], optional = true }
 almost-enough = { version = "0.4.5", optional = true }
 zenavif = { git = "https://github.com/imazen/zenavif", rev = "a7638f6e0655914fb15fe4633ac26425533756c8", default-features = false, features = ["zenav1-svt", "__expert"], optional = true }
 zenjxl = { git = "https://github.com/imazen/zenjxl", rev = "3f5e22e9cf8e2d58311af183d3f20454deeae6be", default-features = false, features = ["encode", "decode", "__expert"], optional = true }

@@ -45,6 +45,18 @@ impl Registry {
         r.add_judge("zensim", || Box::new(judge::Zensim::new()));
         r.add_judge("ssim2", || Box::new(judge::Ssim2));
         r.add_judge("butteraugli", || Box::new(judge::Butteraugli));
+        #[cfg(feature = "adversarial")]
+        {
+            r.add_judge("ssim2-frozen", || {
+                Box::new(crate::adversarial_judges::Frozen)
+            });
+            r.add_judge("zensim-e", || {
+                Box::new(crate::adversarial_judges::Research::new(false))
+            });
+            r.add_judge("zensim-e-codec", || {
+                Box::new(crate::adversarial_judges::Research::new(true))
+            });
+        }
         r
     }
 
