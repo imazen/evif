@@ -12,7 +12,9 @@ Other disagreements remain in the ledger. This measures metric agreement,
 not human preference.
 
 Each view/family shares a 21-point honest quality curve (0–100, step 5) across
-both arms and both target profiles. Search, seed, duplicate and baseline
+both arms and both target profiles. The existing SVT adapter clamps the nominal
+q0 point to quality 1; the other 20 points keep their requested qualities.
+Search, seed, duplicate and baseline
 encodes are reported separately. Every encode retains original codec bytes,
 exact decoded PNG pixels, raw scores and model identities in an EVIF. Native
 butteraugli maps are pixel-bound PFM files; the frozen teacher has no native
