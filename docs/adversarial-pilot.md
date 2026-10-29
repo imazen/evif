@@ -77,6 +77,13 @@ distributed execution belongs in zenfleet.
 encode budget. Pass `--output NEW_DIRECTORY` to repeat a summary without
 replacing an earlier receipt.
 
+Readback accepts `--jobs 1..4` and an optional fresh `--output` directory.
+Each decoder stays single-threaded; one run-heavy scope and CPU affinity
+bound the whole audit. It independently decodes every retained bitstream,
+including duplicates, and checks exact container coverage, score doubles,
+reference/candidate map bindings and RGB8 dimensions. Native verification's
+complete output is retained in `NATIVE_VERIFY.log`.
+
 When staging a worker build, use `just adversarial-stage HOST DIRECTORY`.
 Preserving an older source timestamp can hide an edit from Cargo if the copy
 lands during compilation. The pilot smoke refused such a stale binary before

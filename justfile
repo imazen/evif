@@ -34,8 +34,8 @@ adversarial-run spec output:
 adversarial-summary output:
     python3 tools/adversarial_summary.py '{{output}}'
 
-adversarial-verify output ffmpeg:
-    {{heavy}} python3 tools/adversarial_verify.py '{{output}}' --ffmpeg '{{ffmpeg}}' --evif target/release/evif
+adversarial-verify output ffmpeg jobs='1':
+    {{heavy}} python3 tools/adversarial_verify.py '{{output}}' --ffmpeg '{{ffmpeg}}' --evif target/release/evif --jobs '{{jobs}}'
 
 build:
     {{heavy}} cargo build --release
