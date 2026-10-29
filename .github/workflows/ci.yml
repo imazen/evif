@@ -14,8 +14,8 @@ jobs:
   adversarial:
     runs-on: ubuntu-latest
     env:
-      EVIF_E_MODEL: models/rev7_general_h128_2026-10-27.bin
-      EVIF_ECODEC_MODEL: models/rev7_codec_h128_2026-10-27.bin
+      EVIF_E_MODEL: ${{ github.workspace }}/models/rev7_general_h128_2026-10-27.bin
+      EVIF_ECODEC_MODEL: ${{ github.workspace }}/models/rev7_codec_h128_2026-10-27.bin
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
