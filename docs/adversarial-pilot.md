@@ -83,6 +83,10 @@ bound the whole audit. It independently decodes every retained bitstream,
 including duplicates, and checks exact container coverage, score doubles,
 reference/candidate map bindings and RGB8 dimensions. Native verification's
 complete output is retained in `NATIVE_VERIFY.log`.
+It also extracts the unchanged candidate bytes to
+`artifacts/<codec>/<sha256>.<extension>`, authenticates existing CAS entries,
+and independently decodes those persisted files. The scored EVIF remains the
+authoritative reference/candidate evaluation.
 
 When staging a worker build, use `just adversarial-stage HOST DIRECTORY`.
 Preserving an older source timestamp can hide an edit from Cargo if the copy

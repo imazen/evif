@@ -12,6 +12,9 @@ import json
 from pathlib import Path
 import struct
 import subprocess
+import threading
+
+CAS_LOCK = threading.Lock()
 
 
 def sha(data):
@@ -54,10 +57,23 @@ def verify_one(path, root, ffmpeg, references, ledger):
         raise ValueError("pilot exceeded the one-megapixel cap")
     bits = c[b"BITS"][4:]
     digest = sha(bits)
+    codec = {b"jpeg": ("zenjpeg", "jpg"), b"avif": ("zenav1-svt", "avif")}.get(c[b"BITS"][:4])
+    if codec is None:
+        raise ValueError("unexpected candidate codec in chroma pilot")
+    artifact = root / "artifacts" / codec[0] / f"{digest}.{codec[1]}"
+    # One audit process owns the run. Serialize CAS publication across its readers.
+    with CAS_LOCK:
+        artifact.parent.mkdir(parents=True, exist_ok=True)
+        if artifact.exists():
+            if artifact.read_bytes() != bits:
+                raise ValueError("encoded CAS collision")
+        else:
+            with artifact.open("xb") as f:
+                f.write(bits)
     rendition = decode(ffmpeg, c[b"PNGF"])
     if len(rendition) != width * height * 3:
         raise ValueError("rendition geometry differs")
-    decoded = decode(ffmpeg, bits)
+    decoded = decode(ffmpeg, artifact.read_bytes())
     if len(decoded) != len(rendition):
         raise ValueError("candidate bitstream geometry differs")
     stored = json.loads(c[b"scor"])
@@ -84,7 +100,8 @@ def verify_one(path, root, ffmpeg, references, ledger):
                 raise ValueError("score double/provenance roundtrip differs")
         if stored["gain_vs_baseline"] != r["gains"] or stored["disagreement"] != r["margin"]:
             raise ValueError("gain/objective roundtrip differs")
-    return dict(file=relative, sha256=sha(container), encoded_sha256=digest)
+    return dict(file=relative, sha256=sha(container), encoded_sha256=digest,
+                artifact=str(artifact.relative_to(root)))
 
 
 def main():

@@ -47,6 +47,9 @@ def main():
             key = (r["source"], r["view"], r["encoded_sha256"])
             entry = find_sets[r["partition"]].setdefault(key, dict(
                 source=r["source"], view=r["view"], encoded_sha256=r["encoded_sha256"],
+                artifact=(f'artifacts/zenav1-svt/{r["encoded_sha256"]}.avif'
+                          if r["family"] == "zenav1-svt" else f'artifacts/zenjpeg/{r["encoded_sha256"]}.jpg'),
+                eligible_for_training=r["partition"] == "training-leg",
                 file=r["file"], target_profiles=set(), training_target="ssim2-frozen",
                 frozen_teacher_score=next(s["value"] for s in r["scores"] if s["metric"] == "ssim2-frozen")))
             entry["target_profiles"].add(r["target"])
