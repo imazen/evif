@@ -83,6 +83,7 @@ def main():
         models.append(dict(profile=profile, path=str(dest.relative_to(root)), sha256=digest))
     binary = root / "binaries" / a.binary.name
     binary_sha = retain(a.binary, binary, a.binary_sha256)
+    binary.chmod(0o755)
     for name in ["adversarial_archive.py", "adversarial_models.py", "adversarial_verify.py"]:
         retain(Path(__file__).parent / name, root / "tools" / name)
 
