@@ -64,6 +64,10 @@ impl Baseline {
             let scores = judge::score_all(judges, reference, &enc.pixels)?;
             points.push((bpp, by_key(&scores)));
         }
+        Ok(Some(Self::from_points(points)))
+    }
+
+    pub(crate) fn from_points(mut points: Vec<(f64, BTreeMap<String, f64>)>) -> Self {
         points.sort_by(|a, b| a.0.total_cmp(&b.0));
         let mut range: BTreeMap<String, (f64, f64)> = BTreeMap::new();
         for (_, s) in &points {
@@ -73,7 +77,7 @@ impl Baseline {
                 e.1 = e.1.max(*v);
             }
         }
-        Ok(Some(Self { points, range }))
+        Self { points, range }
     }
 
     /// Baseline score for `key` at `bpp`, linearly interpolated; clamped to
