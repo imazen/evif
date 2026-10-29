@@ -11,6 +11,21 @@ env:
   RUSTFLAGS: -D warnings
 
 jobs:
+  adversarial:
+    runs-on: ubuntu-latest
+    env:
+      EVIF_E_MODEL: models/rev7_general_h128_2026-10-27.bin
+      EVIF_ECODEC_MODEL: models/rev7_codec_h128_2026-10-27.bin
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: python3 tools/adversarial_models.py models
+      - run: cargo clippy -p evif-probe --features adversarial-models-test,possession-svt --all-targets -- -D warnings
+      - run: cargo test -p evif-probe --features adversarial-models-test,possession-svt --lib
+
   lint:
     runs-on: ubuntu-latest
     steps:

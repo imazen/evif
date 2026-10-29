@@ -70,8 +70,9 @@ For each reference image and one *stress family* (a codec with exposed encoder c
    and every sample goes into a TSV ledger.
 
 Disagreement is not ground truth: it says the metrics differ, not which one is wrong.
-The written files are the pairs worth showing to people. Random search is a floor; a
-proper optimizer over the same families comes next.
+The written files are the pairs worth showing to people. Random search is a floor;
+the opt-in [adversarial chroma pilot](docs/adversarial-pilot.md) compares it with
+differential evolution using the revision-7 E/ECodec profiles and two references.
 
 ## Quick start
 

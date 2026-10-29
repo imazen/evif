@@ -36,6 +36,10 @@ All notable changes to this repository. Format: [Keep a Changelog](https://keepa
 ## Workspace
 
 ### Added
+- Opt-in revision-7 E/ECodec and frozen SafeSyn teacher judges, equal-budget
+  differential-evolution/random chroma search, source partitions, scored EVIF
+  retention, native butteraugli maps, and authenticated pilot/readback tools
+  (`d65551cd`). No published container API changes.
 - Major-1 IMIJ page windows and backward carrier sharing for lossless
   reference-predicted renditions; selected samples retain their media identities
   (`d748464d`).

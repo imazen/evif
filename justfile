@@ -7,6 +7,36 @@ corpus := env_var_or_default('CODEC_CORPUS', env_var('HOME') / 'work/codec-corpu
 default:
     @just --list
 
+adversarial-check:
+    cargo fmt -p evif -p evif-probe --check
+    {{heavy}} cargo clippy -p evif-probe --features adversarial,possession-svt --all-targets -- -D warnings
+    {{heavy}} cargo test -p evif-probe --features adversarial,possession-svt --lib
+
+# Copy only this workspace; no preserved source timestamps can hide a changed file.
+adversarial-stage host destination:
+    rsync -r --checksum --no-times --exclude .git --exclude .jj --exclude target --exclude .workongoing ./ '{{host}}:{{destination}}/'
+
+adversarial-build:
+    {{heavy}} cargo build --release -p evif-probe --features adversarial,possession-svt
+
+adversarial-models directory:
+    python3 tools/adversarial_models.py '{{directory}}'
+
+adversarial-golden:
+    {{heavy}} cargo test -p evif-probe --features adversarial-models-test,possession-svt --lib adversarial_judges::golden
+
+adversarial-prepare study output commit:
+    python3 tools/adversarial_prepare.py '{{study}}' '{{output}}' --build-commit '{{commit}}'
+
+adversarial-run spec output:
+    {{heavy}} target/release/evif adversarial '{{spec}}' '{{output}}'
+
+adversarial-summary output:
+    python3 tools/adversarial_summary.py '{{output}}'
+
+adversarial-verify output ffmpeg:
+    {{heavy}} python3 tools/adversarial_verify.py '{{output}}' --ffmpeg '{{ffmpeg}}' --evif target/release/evif
+
 build:
     {{heavy}} cargo build --release
 
