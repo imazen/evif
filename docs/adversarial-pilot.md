@@ -119,3 +119,6 @@ path to the expected 512×512 RGB24 raster. PNG renditions still use stdin.
 The failed first full audit is retained; repeated audits use a fresh output
 directory and keep every existing check. This changes input transport, not
 encoded bytes or the independent decoder.
+
+[Completed 162-view pilot ledger results](../benchmarks/adversarial-pilot-2026-10-29.pointer.md)
+include all five content classes and measured arm wall times.
