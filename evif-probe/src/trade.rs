@@ -3,7 +3,7 @@
 //! and the gate are evaluated from the ledger by `tools/trade_gate.py`.
 use crate::{
     Res,
-    adversarial::{Control, Proposals, View, image, replay, save},
+    adversarial::{Control, Proposals, View, replay, save},
     adversarial_judges::{GatedButteraugli, Research, sha},
     family::{Encoded, Family},
     image::Rgb8Image,
