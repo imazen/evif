@@ -447,6 +447,7 @@ dependencies = [
  "zenjpeg",
  "zenjpegai",
  "zenjxl",
+ "zenmetrics-stats",
  "zenpixels",
  "zenpixels-convert",
  "zenpng",
@@ -1906,6 +1907,11 @@ dependencies = [
  "zencodec",
  "zenpixels",
 ]
+
+[[package]]
+name = "zenmetrics-stats"
+version = "0.1.0"
+source = "git+https://github.com/imazen/zenmetrics?rev=6b0a7f1c19b7e7ab76674efcb44fc326a39eba49#6b0a7f1c19b7e7ab76674efcb44fc326a39eba49"
 
 [[package]]
 name = "zenpixels"

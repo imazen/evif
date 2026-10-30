@@ -31,6 +31,7 @@ def main():
     p.add_argument("--view-ids", nargs="*", help="keep only these views")
     p.add_argument("--limit", type=int)
     p.add_argument("--shard", default="0/1")
+    p.add_argument("--balanced-shards", type=int, help="write OUTPUT-shard-NN.json, largest views first")
     a = p.parse_args()
     pilot = json.loads(a.pilot_spec.read_text())
     controls = json.loads(a.controls.read_text())
@@ -41,17 +42,38 @@ def main():
         views = views[:a.limit]
     i, n = map(int, a.shard.split("/"))
     views = [dict(v, seeds={}) for k, v in enumerate(views) if k % n == i]
-    probe = [v for v in a.probe_views if v in {x["id"] for x in views}]
-    spec = dict(build_commit=a.build_commit, seed=a.seed, views=views, controls=pilot["controls"],
-                metric_controls=controls["metric_controls"],
-                byte_controls=[c for c in controls["byte_controls"] if c["family"] in a.families],
-                families=a.families, ramps=a.ramps, kinds=a.kinds, targets=a.targets if "de" in a.kinds else [],
-                de_samples=a.de_samples, budgets=a.budgets if "bytematch" in a.kinds else [],
-                map_sample_mod=a.map_sample_mod, probe_views=probe,
-                candidates=json.loads(a.candidates.read_text()) if a.candidates else [])
-    with a.output.open("x") as f:
-        json.dump(spec, f, indent=2, allow_nan=False)
-        f.write("\n")
+    def spec_for(vs):
+        keep = {x["id"] for x in vs}
+        return dict(build_commit=a.build_commit, seed=a.seed, views=vs, controls=pilot["controls"],
+                    metric_controls=controls["metric_controls"],
+                    byte_controls=[c for c in controls["byte_controls"] if c["family"] in a.families],
+                    families=a.families, ramps=a.ramps, kinds=a.kinds,
+                    targets=a.targets if "de" in a.kinds else [],
+                    de_samples=a.de_samples, budgets=a.budgets if "bytematch" in a.kinds else [],
+                    map_sample_mod=a.map_sample_mod, probe_views=[v for v in a.probe_views if v in keep],
+                    candidates=json.loads(a.candidates.read_text()) if a.candidates else [])
+
+    def write(path, spec):
+        with path.open("x") as f:
+            json.dump(spec, f, indent=2, allow_nan=False)
+            f.write("\n")
+
+    if a.balanced_shards:
+        def area(v):
+            header = Path(v["path"]).read_bytes()[16:24]
+            return int.from_bytes(header[:4], "big") * int.from_bytes(header[4:], "big")
+        # Longest-processing-time first: each view goes to the lightest shard.
+        shards = [[] for _ in range(a.balanced_shards)]
+        load = [0] * a.balanced_shards
+        for v in sorted(views, key=lambda v: (-area(v), v["id"])):
+            k = load.index(min(load))
+            shards[k].append(v)
+            load[k] += area(v)
+        for k, vs in enumerate(shards):
+            write(a.output.with_name(f"{a.output.stem}-shard-{k:02d}.json"), spec_for(vs))
+        print(json.dumps(dict(shards=a.balanced_shards, views=[len(x) for x in shards], load=load)))
+        return
+    write(a.output, spec_for(views))
     print(json.dumps(dict(views=len(views), families=a.families, kinds=a.kinds)))
 
 

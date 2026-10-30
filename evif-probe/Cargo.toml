@@ -18,7 +18,7 @@ adversarial = ["dep:zensim-research", "dep:ssim2-frozen", "dep:sha2"]
 # Caller-controlled test gate: both exact external model files are mandatory.
 adversarial-models-test = ["adversarial"]
 # Trade ladders, byte-matched pairs and the DE trade search: adds the CVVDP judge.
-trade = ["adversarial", "possession-svt", "dep:cvvdp"]
+trade = ["adversarial", "possession-svt", "dep:cvvdp", "dep:zenmetrics-stats"]
 # Larger experimental codec dependencies; the container remains unchanged.
 possession = ["possession-svt", "possession-jxl", "possession-jpegai", "possession-coolchic"]
 possession-svt = ["dep:zenavif", "dep:almost-enough"]
@@ -33,6 +33,8 @@ zensim-research = { package = "zensim", git = "https://github.com/imazen/zensimx
 # Exact published source: VCS b7c2b4b33f3a26b753caabd5264a7fef9c4f4545.
 ssim2-frozen = { package = "fast-ssim2", version = "=0.8.2", features = ["imgref", "hdr-pu"], optional = true }
 almost-enough = { version = "0.4.5", optional = true }
+# Source-clustered percentile bootstrap for the G-TRADE comparison (MIT OR Apache-2.0).
+zenmetrics-stats = { git = "https://github.com/imazen/zenmetrics", rev = "6b0a7f1c19b7e7ab76674efcb44fc326a39eba49", default-features = false, optional = true }
 # Third reference judge of the trade ladders; the revision the chroma diagnostics ran.
 cvvdp = { git = "https://github.com/imazen/zenmetrics", rev = "0a61830db89a768ab9462f166d1412e948e4efa9", default-features = false, features = ["std"], optional = true }
 zenavif = { git = "https://github.com/imazen/zenavif", rev = "a7638f6e0655914fb15fe4633ac26425533756c8", default-features = false, features = ["zenav1-svt", "__expert"], optional = true }

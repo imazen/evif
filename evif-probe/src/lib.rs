@@ -25,4 +25,6 @@ mod adversarial_judges;
 mod trade;
 #[cfg(feature = "trade")]
 mod trade_judges;
+#[cfg(feature = "trade")]
+mod trade_stats;
 mod wire_cli;

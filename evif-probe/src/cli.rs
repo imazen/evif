@@ -33,6 +33,7 @@ evif: stress-test image quality metrics with a self-reporting container
                [--format png|imij|native|evif] [--rendition png|imij] [--omit-bits]
                IMAGE.png...        encode with a family and record DIR/render.tsv
   evif trade SPEC.json NEW_DIR     trade ladders, byte-matched pairs and DE trade search (feature trade)
+  evif trade-bootstrap TALLIES.json NEW.json   paired source bootstrap of the G-TRADE tallies
   evif list                        families, judges and score keys
   evif wire inspect FILE           inspect major-1 media and payload integrity
   evif wire pack PLAN.json OUTPUT  package symmetric still/video assets
@@ -60,6 +61,8 @@ pub fn run(registry: &Registry, args: &[String]) -> Res<()> {
         Some("adversarial") => crate::adversarial::run(registry, &args[1..]),
         #[cfg(feature = "trade")]
         Some("trade") => crate::trade::run(registry, &args[1..]),
+        #[cfg(feature = "trade")]
+        Some("trade-bootstrap") => crate::trade_stats::run(&args[1..]),
         Some("wire") => crate::wire_cli::run(&args[1..]),
         Some("probe") => probe(registry, &args[1..]),
         Some("inspect") => inspect(&args[1..]),
