@@ -425,6 +425,9 @@ struct Candidate {
     model: String,
     sha256: String,
 }
+fn yes() -> bool {
+    true
+}
 fn de_samples() -> usize {
     16
 }
@@ -460,6 +463,13 @@ struct Spec {
     probe_views: Vec<String>,
     #[serde(default)]
     candidates: Vec<Candidate>,
+    /// `bitstream`: the training-leg partition keeps only the original encoded bytes (content
+    /// addressed) and the ledger row; the gauntlet always keeps every `.evif`.
+    #[serde(default)]
+    persist_training_leg: Option<String>,
+    /// Native maps for DE finds (a second scoring pass); on by default.
+    #[serde(default = "yes")]
+    find_maps: bool,
 }
 
 fn merge(mut a: Value, b: Value) -> Value {
@@ -559,6 +569,22 @@ impl Runner<'_> {
         name: &str,
         meta: &Value,
     ) -> Res<String> {
+        if vx.partition == "training-leg"
+            && self.spec.persist_training_leg.as_deref() == Some("bitstream")
+        {
+            let bits = enc.bits.as_ref().ok_or("real encode bytes required")?;
+            let ext = match &bits.codec {
+                b"jpeg" => "jpg",
+                b"avif" => "avif",
+                _ => return Err("unknown bitstream codec".into()),
+            };
+            let rel = format!("bitstreams/{}.{ext}", sha(&bits.data));
+            let path = self.out.join(&rel);
+            if !path.exists() {
+                fs::write(&path, &bits.data).map_err(|e| e.to_string())?;
+            }
+            return Ok(rel);
+        }
         let mut f = write::build(fam, vx.reference, vx.source, target, s, enc)?;
         f.scores
             .as_mut()
@@ -699,6 +725,7 @@ pub(crate) fn run(registry: &Registry, args: &[String]) -> Res<()> {
     fs::create_dir(out).map_err(|e| format!("new output directory required: {e}"))?;
     fs::write(out.join("SPEC.json"), &spec_bytes).map_err(|e| e.to_string())?;
     fs::create_dir(out.join("maps")).map_err(|e| e.to_string())?;
+    fs::create_dir(out.join("bitstreams")).map_err(|e| e.to_string())?;
 
     let gate = Rc::new(Cell::new(false));
     let butter = Rc::new(GatedButteraugli {
@@ -991,7 +1018,7 @@ fn process_view(
                         if found && fresh {
                             finds += 1;
                         }
-                        if found {
+                        if found && spec.find_maps {
                             r.add_maps(vx, &mut s, &enc)?;
                         }
                         let head = merge(
