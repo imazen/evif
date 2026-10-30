@@ -57,6 +57,79 @@ class Truth(unittest.TestCase):
         self.assertEqual(g.model_inversions(a, a, "UNDECIDED", ["zensim-e"]), {})
 
 
+class SmallViews(unittest.TestCase):
+    """Amendment 2026-10-30: SSIMULACRA2 does not vote on views of 64 px or less."""
+
+    def test_the_agreeing_set_on_a_small_view_is_butteraugli_and_cvvdp(self):
+        a = scores()
+        s_and_b = g.votes(a, scores(s=70.0, b=4.0))          # S and B worse, C abstains
+        self.assertEqual(g.truth(s_and_b), ("WORSE", ["ssim2-frozen", "butteraugli"]))
+        self.assertEqual(g.truth(s_and_b, small=True), ("UNDECIDED", []))
+        b_and_c = g.votes(a, scores(s=95.0, b=4.0, c=8.0))   # S better, B and C worse
+        self.assertEqual(g.truth(b_and_c), ("WORSE", ["butteraugli", "cvvdp"]))
+        self.assertEqual(g.truth(b_and_c, small=True), ("WORSE", ["butteraugli", "cvvdp"]))
+        s_and_c = g.votes(a, scores(s=70.0, c=5.0))          # S and C worse, B abstains
+        self.assertEqual(g.truth(s_and_c)[0], "WORSE")
+        self.assertEqual(g.truth(s_and_c, small=True)[0], "UNDECIDED")
+        s_worse_b_c_better = g.votes(a, scores(s=60.0, b=0.2, c=11.0))
+        self.assertEqual(g.truth(s_worse_b_c_better, small=True), ("BETTER", ["butteraugli", "cvvdp"]))
+        self.assertEqual(g.truth(g.votes(a, scores(b=0.2, c=9.9)), small=True)[0], "UNDECIDED")   # B alone
+
+    def test_a_view_is_small_by_its_long_edge(self):
+        sizes = g.Sizes()
+        self.assertTrue(sizes.small("im5016_m32"))
+        self.assertTrue(sizes.small("cid-1080721_m64"))
+        self.assertFalse(sizes.small("im5016_m128"))
+        self.assertFalse(sizes.small("cid-1080721_crop256"))
+        self.assertFalse(sizes.small("safe00"))                # no cap in the id: not small
+        dims = g.Sizes({"v1": [40, 20], "v2": [65, 10], "v3_m32": [300, 200]})
+        self.assertTrue(dims.small("v1"))
+        self.assertFalse(dims.small("v2"))
+        self.assertFalse(dims.small("v3_m32"))                 # the table wins over the id
+
+    def row(self, view, rung, **kw):
+        return dict(kind="ladder", view=view, source="src-" + view, partition="gauntlet", trade_family="ycc420",
+                    ramp="large", rung=rung, rungs=2, chroma=float(rung), scores=scores(**kw), bytes=100 + rung,
+                    encoded_sha256=f"{view}{rung}")
+
+    def test_strata_split_the_tallies_and_apply_each_rule(self):
+        worse = dict(s=70.0, b=4.0, e=85.0, **{"luma601-psnr": 41.0, "chroma601-psnr": 35.0})   # C abstains
+        rows = []
+        for view in ("small_m64", "big_m128"):
+            rows += [self.row(view, 0), self.row(view, 1, **worse)]
+        result = g.analyse(iter(rows), ["zensim-e"])
+        t = g.tallies_json(result, ["zensim-e"])
+        self.assertEqual(sorted(k for k in t if k.startswith("gauntlet")), ["gauntlet", "gauntlet/regular", "gauntlet/small"])
+        big = t["gauntlet/regular"]["a"]["zensim-e"]["src-big_m128"]
+        small = t["gauntlet/small"]["a"]["zensim-e"]["src-small_m64"]
+        self.assertEqual((big["n_worse"], big["inv"], big["undecided"]), (1, 1, 0))      # S and B agree
+        self.assertEqual((small["n_worse"], small["inv"], small["undecided"]), (0, 0, 1))  # B alone: undecided
+        pooled = t["gauntlet"]["a"]["zensim-e"]
+        self.assertEqual(set(pooled), {"src-big_m128", "src-small_m64"})
+        self.assertNotIn("src-small_m64", t["gauntlet/regular"]["a"]["zensim-e"])
+        self.assertEqual(result["agree"][("gauntlet/small", "ycc420", "decided")], 0)
+        self.assertEqual(result["agree"][("gauntlet/regular", "ycc420", "decided")], 1)
+        self.assertEqual(result["agree"][("gauntlet/small", "ycc420", "dissent:ssim2-frozen")], 0)   # S is not a rule member
+
+    def test_small_view_finds_need_both_valid_margins_and_no_legacy_find(self):
+        def de(view, index, sha, m_s, m_b, m_c, find, legacy):
+            return dict(kind="de", view=view, source="src-" + view, partition="gauntlet", trade_family="ycc420",
+                        target="zensim-e", arm="de", index=index, scores=scores(), bytes=1, find=find,
+                        legacy_find=legacy, margin=sorted([m_s, m_b, m_c])[1],
+                        margins={"ssim2-frozen": m_s, "butteraugli": m_b, "cvvdp": m_c}, encoded_sha256=sha)
+        rows = [de("s_m32", 0, "a", 0.9, 0.4, -0.2, True, True),    # old rule: a find (S and B); amended: no (C negative)
+                de("s_m32", 1, "b", -0.5, 0.6, 0.7, True, False),   # old: find (B, C); amended: find
+                de("s_m32", 2, "c", 0.2, 0.2, -1.0, True, True),    # amended: no
+                de("r_m128", 0, "a", 0.9, 0.4, -0.2, True, True),
+                de("r_m128", 1, "b", -0.5, 0.6, 0.7, True, False)]
+        result = g.analyse(iter(rows), ["zensim-e"])
+        t = g.tallies_json(result, ["zensim-e"])["gauntlet"]["b"]["zensim-e"]
+        self.assertEqual((t["src-s_m32"]["encodes"], t["src-s_m32"]["finds"], t["src-s_m32"]["legacy_finds"]), (3, 1, 0))
+        self.assertEqual((t["src-r_m128"]["encodes"], t["src-r_m128"]["finds"], t["src-r_m128"]["legacy_finds"]), (2, 2, 1))
+        strong = result["de"][("s_m32", "ycc420", "zensim-e", "de")]
+        self.assertEqual((len(strong["strong05"]), len(strong["strong10"])), (1, 0))   # min(B, C) of "b" is 0.6
+
+
 class Ladders(unittest.TestCase):
     def test_admission_walk_matches_the_chroma_only_rule(self):
         # a small drop is skipped, not a stop; the first adjacent tie or increase stops the walk
