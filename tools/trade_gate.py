@@ -62,15 +62,16 @@ def model_inversions(sa, sb, result, models):
 
 
 def admission(values):
-    """The chroma-only ladders' admission walk: keep a rung falling at least one point."""
+    """The chroma-only ladders' admission walk (Stage B rule): stop at the first adjacent tie or
+    increase; keep a rung only when it falls at least one point from the last kept rung."""
     kept = [0]
     stop = None
     for i in range(1, len(values)):
-        if values[i] <= values[kept[-1]] - 1.0:
-            kept.append(i)
-        else:
+        if values[i] >= values[i - 1]:
             stop = i
             break
+        if values[i] <= values[kept[-1]] - 1.0:
+            kept.append(i)
     return kept, stop
 
 

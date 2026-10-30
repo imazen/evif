@@ -59,9 +59,11 @@ class Truth(unittest.TestCase):
 
 class Ladders(unittest.TestCase):
     def test_admission_walk_matches_the_chroma_only_rule(self):
-        kept, stop = g.admission([95, 94, 92.5, 92.4, 80])
-        self.assertEqual((kept, stop), ([0, 1, 2], 3))
+        # a small drop is skipped, not a stop; the first adjacent tie or increase stops the walk
+        kept, stop = g.admission([95, 94.5, 92.5, 92.4, 92.4, 80])
+        self.assertEqual((kept, stop), ([0, 2], 4))
         self.assertEqual(g.admission([95, 90, 80]), ([0, 1, 2], None))
+        self.assertEqual(g.admission([95, 96, 80]), ([0], 1))
 
     def test_trade_pair_needs_luma_up_and_chroma_down(self):
         a = {"scores": scores(), "bytes": 10}

@@ -470,6 +470,9 @@ struct Spec {
     /// Native maps for DE finds (a second scoring pass); on by default.
     #[serde(default = "yes")]
     find_maps: bool,
+    /// `bitstream`: DE samples that are not finds keep only their encoded bytes and ledger row.
+    #[serde(default)]
+    persist_de_non_find: Option<String>,
 }
 
 fn merge(mut a: Value, b: Value) -> Value {
@@ -558,6 +561,15 @@ impl Runner<'_> {
         }
         Ok(())
     }
+    /// Bitstream-only persistence: the training-leg partition on request, and DE samples that
+    /// are not finds on request. The gauntlet always keeps every other sample as a full `.evif`.
+    fn bitstream_only(&self, vx: &Vx, meta: &Value) -> bool {
+        (vx.partition == "training-leg"
+            && self.spec.persist_training_leg.as_deref() == Some("bitstream"))
+            || (meta["kind"] == "de"
+                && meta["find"] == false
+                && self.spec.persist_de_non_find.as_deref() == Some("bitstream"))
+    }
     #[allow(clippy::too_many_arguments)]
     fn write_evif(
         &self,
@@ -569,9 +581,7 @@ impl Runner<'_> {
         name: &str,
         meta: &Value,
     ) -> Res<String> {
-        if vx.partition == "training-leg"
-            && self.spec.persist_training_leg.as_deref() == Some("bitstream")
-        {
+        if self.bitstream_only(vx, meta) {
             let bits = enc.bits.as_ref().ok_or("real encode bytes required")?;
             let ext = match &bits.codec {
                 b"jpeg" => "jpg",
