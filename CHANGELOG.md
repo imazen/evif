@@ -38,6 +38,13 @@ All notable changes to this repository. Format: [Keep a Changelog](https://keepa
 ### Added
 - Registered the [trade-ladder design, three-reference truth rule and G-TRADE gate](docs/trade-ladders.md)
   before any trade sample was scored.
+- `evif trade` (probe feature `trade`): luma-finer, chroma-coarser trade ladders for `ycc444`, `ycc420`, `xyb-extended`,
+  `xyb-capped` and `svt-420`, byte-matched allocation pairs, a DE search over the trade dimensions, per-rung luma and
+  chroma diagnostics, stored-control replay (frozen teacher, CVVDP, butteraugli, chroma-only bytes), bitstream-only
+  persistence for the training-leg partition, and `evif trade-bootstrap` (paired bootstrap over sources) (`e47039be`,
+  `4690cadf`, `bbf16802`). Gate tool `tools/trade_gate.py` with the 64 px SSIMULACRA2 amendment and size strata
+  (`5b37c2c4`, `896a295d`); check scripts in `tools/trade-checks` and the
+  [gauntlet grid summary](benchmarks/trade-gauntlet-2026-10-30.md) (`128b37f6`).
 - Opt-in revision-7 E/ECodec and frozen SafeSyn teacher judges, equal-budget
   differential-evolution/random chroma search, source partitions, scored EVIF
   retention, native butteraugli maps, and authenticated pilot/readback tools
