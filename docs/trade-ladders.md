@@ -168,3 +168,32 @@ trade-pair definition above would drop most XYB pairs. Amended definition: a tra
 rungs of a ramp other than `none` where `luma601-psnr` or `lumrel-psnr` rises by at least 0.02 dB and
 `chroma601-psnr` falls by at least 0.02 dB. The margins, the vote rule, the find rule and the gate are
 unchanged. The smoke views stay in the pilot set; their smoke ledger is not used for any gate figure.
+
+## Amendment 2026-10-30 (after the coordinator's SSIMULACRA2 small-view finding, before reading any G-TRADE result)
+
+Finding (coordinator, 2026-10-30): SSIMULACRA2 does not give valid scores on frames whose long edge is 64 px
+or less. The frozen port agrees with the C++ reference implementation on sampled pairs at 32, 64, 128 and
+256 px, so the cause is the algorithm, not the port. Within one ladder the order is mostly kept on small
+views; levels, and anything compared across views, are not.
+
+- **Truth rule.** For a view with a long edge of at most 64 px, SSIMULACRA2 does not vote. The pair's truth is
+  WORSE when butteraugli and CVVDP both vote worse, BETTER when both vote better, UNDECIDED otherwise, so the
+  agreeing set is always {butteraugli, CVVDP}. For views with a long edge above 64 px the rule above is
+  unchanged (two of three references, never SSIMULACRA2 alone). Votes are stored for all three references
+  either way; the amendment is applied when the ledger is read.
+- **Find rule.** For a view of at most 64 px a sample is a find for target t when `gain(t) - gain(B)` and
+  `gain(t) - gain(C)` are both positive; the strong-find thresholds use the smaller of the two margins. The
+  search itself ran with the registered objective (second-largest of the three margins), so on these views it is
+  partly steered by a margin that is not valid; the ledger keeps all three margins and the finds are recomputed
+  from them. The two-reference "legacy" find (S and B) is not reported for these views.
+- **Strata.** G-TRADE (a), (a2) and (b) are reported for two strata: views with a long edge above 64 px
+  (primary, three-reference rule) and views with a long edge of 64 px or less (butteraugli and CVVDP). A pooled
+  figure that applies each view's own rule is given beside them and labelled pooled. The paired bootstrap over
+  sources and the proposed bar apply within each stratum. The exploratory stride tables follow the same rule.
+  The luma-only SSIMULACRA2 diagnostic (`luma601-ssim2`) is a diagnostic only and is not valid at 64 px or less;
+  the trade-pair criterion uses PSNR diagnostics and is unchanged.
+- **What had been read.** The pilot had been analysed in full, including its gauntlet slice of 15 sources
+  (that is a G-TRADE-shaped reading, and it was read). Its views are 256 and 512 px, so this amendment changes
+  no pilot figure. The gauntlet grid is running: none of its 346 jobs on views of 64 px or less had completed,
+  and no gate figure from the grid had been read (a tool test on the first 21 finished jobs printed counts of
+  ladders and pairs only).
