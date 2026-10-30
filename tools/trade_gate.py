@@ -107,6 +107,7 @@ def analyse(rows, models):
     de = defaultdict(lambda: dict(encodes=0, refused=0, finds=set(), legacy=set()))
     probe = defaultdict(list)
     refused = Counter()
+    bytematch_cells = Counter()
     partitions = {}
     for r in rows:
         partitions[r["source"]] = r["partition"]
@@ -116,6 +117,8 @@ def analyse(rows, models):
                 de[(r["view"], r["trade_family"], r["target"], r["arm"])]["refused"] += 1
             continue
         kind = r["kind"]
+        if kind == "bytematch":
+            bytematch_cells[(r["partition"], r["trade_family"], bool(r.get("matched")))] += 1
         if kind == "ladder":
             ladders[(r["view"], r["trade_family"], r["ramp"])].append(r)
         elif kind == "bytematch" and r.get("matched"):
@@ -132,8 +135,10 @@ def analyse(rows, models):
         elif kind == "probe":
             probe[(r["view"], r["trade_family"])].append(r)
 
-    tally = {"a": Tally(), "a2": Tally(), "b": Tally()}
+    tally = {"a": Tally(), "a2": Tally(), "b": Tally(), "a_s2": Tally(), "a_s4": Tally(), "a_s8": Tally()}
     agree = Counter()
+    examples = []
+    bm_stats = Counter()
     luma_gain = defaultdict(list)
     ladder_rows = []
     pair_rows = []
@@ -155,20 +160,47 @@ def analyse(rows, models):
                 continue
             trade_pairs += 1
             luma_gain[(tf, ramp)].append(max(deltas["luma601"], deltas["lumrel"]))
-            agree[(tf, "trade-pairs")] += 1
-            agree[(tf, "decided")] += t != "UNDECIDED"
-            agree[(tf, "unanimous")] += t != "UNDECIDED" and len(agreeing) == 3
-            for r in REFS:
-                if t != "UNDECIDED" and r not in agreeing:
-                    agree[(tf, "dissent:" + r)] += 1
-            if t == "WORSE" and v["ssim2-frozen"] == "better":
-                agree[(tf, "ssim2-says-better-while-others-say-worse")] += 1
+            part = a["partition"]
+            for scope in (part, "all"):
+                agree[(scope, tf, "trade-pairs")] += 1
+                agree[(scope, tf, "decided")] += t != "UNDECIDED"
+                agree[(scope, tf, "decided-worse")] += t == "WORSE"
+                agree[(scope, tf, "unanimous")] += t != "UNDECIDED" and len(agreeing) == 3
+                for r in REFS:
+                    if t != "UNDECIDED" and r not in agreeing:
+                        agree[(scope, tf, "dissent:" + r)] += 1
+                if t == "WORSE" and v["ssim2-frozen"] == "better":
+                    agree[(scope, tf, "ssim2-says-better-while-others-say-worse")] += 1
+            if t == "WORSE" and any(f == "inversion" for f in flags.values()):
+                examples.append(dict(kind="ladder", view=view, partition=part, family=tf, ramp=ramp, rung_a=a["rung"],
+                                     rung_b=b["rung"], chroma_a=a["chroma"], chroma_b=b["chroma"], bytes_a=a["bytes"],
+                                     bytes_b=b["bytes"], deltas=deltas, truth=t, agreeing=agreeing,
+                                     refs_a={r: a["scores"][r] for r in REFS}, refs_b={r: b["scores"][r] for r in REFS},
+                                     models_a={m: a["scores"][m] for m in models if m in a["scores"]},
+                                     models_b={m: b["scores"][m] for m in models if m in b["scores"]},
+                                     inverted=[m for m, f in flags.items() if f == "inversion"],
+                                     excess={m: b["scores"][m] - a["scores"][m] for m in flags}))
             for m in models:
                 if m in a["scores"]:
                     f = flags.get(m)
                     tally["a"].add(source, tf, m, pairs=1, undecided=int(t == "UNDECIDED"),
                                    n_worse=int(t == "WORSE"), inv=int(f == "inversion"),
                                    n_better=int(t == "BETTER"), reverse=int(f == "reverse"))
+        # Exploratory strides (not the registered gate): the same trade-pair criterion and vote rule
+        # between rungs two, four and eight apart, where changes clear the vote margins more often.
+        for stride in (2, 4, 8):
+            for a, b in zip(rs, rs[stride:]):
+                criterion, deltas = trade_pair(a, b)
+                if ramp == "none" or not criterion:
+                    continue
+                t, _ = truth(votes(a["scores"], b["scores"]))
+                flags = model_inversions(a["scores"], b["scores"], t, models)
+                for m in models:
+                    if m in a["scores"]:
+                        f = flags.get(m)
+                        tally[f"a_s{stride}"].add(source, tf, m, pairs=1, undecided=int(t == "UNDECIDED"),
+                                                  n_worse=int(t == "WORSE"), inv=int(f == "inversion"),
+                                                  n_better=int(t == "BETTER"), reverse=int(f == "reverse"))
         first, last = rs[0], rs[-1]
         ladder_rows.append(dict(view=view, source=source, partition=rs[0]["partition"], family=tf, ramp=ramp,
                                 rungs=len(rs), trade_pairs=trade_pairs, admitted=trade_pairs >= 3, kept=len(kept),
@@ -183,8 +215,19 @@ def analyse(rows, models):
         source = rs[0]["source"]
         for a, b in itertools.combinations(rs, 2):
             v = votes(a["scores"], b["scores"])
-            t, _ = truth(v)
+            t, agreeing = truth(v)
             flags = model_inversions(a["scores"], b["scores"], t, models)
+            bm_stats[(a["partition"], tf, "pairs")] += 1
+            bm_stats[(a["partition"], tf, "decided")] += t != "UNDECIDED"
+            if t == "WORSE" and any(f == "inversion" for f in flags.values()):
+                examples.append(dict(kind="bytematch", view=view, partition=a["partition"], family=tf,
+                                     budget_quality=budget, rho_a=a["rho"], rho_b=b["rho"], bytes_a=a["bytes"],
+                                     bytes_b=b["bytes"], truth=t, agreeing=agreeing,
+                                     refs_a={r: a["scores"][r] for r in REFS}, refs_b={r: b["scores"][r] for r in REFS},
+                                     models_a={m: a["scores"][m] for m in models if m in a["scores"]},
+                                     models_b={m: b["scores"][m] for m in models if m in b["scores"]},
+                                     inverted=[m for m, f in flags.items() if f == "inversion"],
+                                     excess={m: b["scores"][m] - a["scores"][m] for m in flags}))
             for m in models:
                 if m in a["scores"]:
                     f = flags.get(m)
@@ -198,7 +241,8 @@ def analyse(rows, models):
         tally["b"].add(cell["source"], f"{tf}/{arm}", target, encodes=budget, finds=len(cell["finds"]),
                        legacy_finds=len(cell["legacy"]))
     return dict(tally=tally, partitions=partitions, agree=agree, luma_gain=luma_gain, ladders=ladder_rows,
-                pairs=pair_rows, probe=probe, refused=refused)
+                pairs=pair_rows, probe=probe, refused=refused, examples=examples, de=de, bm_stats=bm_stats,
+                bytematch_cells=bytematch_cells)
 
 
 def tallies_json(result, models):
@@ -239,31 +283,125 @@ def percentile(values, p):
     return s[lo] + (s[hi] - s[lo]) * (k - lo)
 
 
-def pilot_tables(result, models, only=None):
-    """Per-family descriptive pilot statistics (markdown)."""
-    keep = (lambda part: part == only) if only else (lambda part: True)
-    out = []
-    lad = [r for r in result["ladders"] if keep(r["partition"])]
+def sum_tally(tally, scope, partitions, model, stratum_filter=None):
+    """Pool one gate metric's per-source counters over a scope (partition name or 'all')."""
+    by_family = defaultdict(Counter)
+    for source, strata in tally.data.items():
+        if scope != "all" and partitions[source] != scope:
+            continue
+        for stratum, by_model in strata.items():
+            if model in by_model:
+                by_family[stratum].update(by_model[model])
+    return by_family
+
+
+def pct(x, n):
+    return f"{100 * x / n:.1f}%" if n else "-"
+
+
+def pilot_tables(result, models, scope="all"):
+    """Descriptive pilot statistics (markdown) for one scope: a partition name or 'all'."""
+    part = result["partitions"]
+    out = [f"## Scope: {scope}"]
+    lad = [r for r in result["ladders"] if scope == "all" or r["partition"] == scope]
     rows = []
     for tf in FAMILIES:
         for ramp in ("none", "tiny", "medium", "large"):
             ls = [r for r in lad if r["family"] == tf and r["ramp"] == ramp]
             if not ls:
                 continue
-            admitted = sum(r["admitted"] for r in ls)
-            gain = [r["luma601_gain"] for r in ls]
-            rel = [r["lumrel_gain"] for r in ls]
-            deep = [r["depth_past_stop"] for r in ls]
-            stopped = [r for r in ls if r["stop"] is not None]
-            rows.append([tf, ramp, len(ls), admitted,
-                         f"{statistics.median(gain):.2f}", f"{statistics.median(rel):.2f}",
-                         f"{statistics.median(deep):.0f}", f"{sum(1 for r in ls if r['depth_past_stop'] > 0)}",
-                         len(stopped), f"{statistics.median(r['chroma601_loss'] for r in ls):.2f}"])
-    out.append("### Ladders\n" + table(rows, ["family", "ramp", "ladders", "admitted (>=3 trade pairs)",
-                                              "median luma601 gain dB", "median lumrel gain dB",
-                                              "median rungs past SSIM2 stop", "ladders past stop",
-                                              "ladders with a stop", "median chroma601 loss dB"]))
+            rows.append([tf, ramp, len(ls), sum(r["admitted"] for r in ls),
+                         f"{statistics.median(r['luma601_gain'] for r in ls):.2f}",
+                         f"{statistics.median(r['lumrel_gain'] for r in ls):.2f}",
+                         f"{statistics.median(r['chroma601_loss'] for r in ls):.2f}",
+                         f"{statistics.median(r['depth_past_stop'] for r in ls):.0f}",
+                         sum(1 for r in ls if r["depth_past_stop"] > 0), sum(1 for r in ls if r["stop"] is not None)])
+    out.append("### Ladders (admitted = at least three trade pairs)\n" + table(rows, [
+        "family", "ramp", "ladders", "admitted", "median luma601 gain dB", "median lumrel gain dB",
+        "median chroma601 loss dB", "median rungs past chroma-only stop", "ladders past stop", "ladders with a stop"]))
+    rows = []
+    for tf in FAMILIES:
+        c = result["agree"]
+        n = c[(scope, tf, "trade-pairs")]
+        if not n:
+            continue
+        rows.append([tf, n, pct(c[(scope, tf, "decided")], n), pct(c[(scope, tf, "unanimous")], n),
+                     c[(scope, tf, "decided-worse")]] + [c[(scope, tf, "dissent:" + r)] for r in REFS] +
+                    [c[(scope, tf, "ssim2-says-better-while-others-say-worse")]])
+    out.append("### Reference agreement on trade pairs (ramps other than none)\n" + table(rows, [
+        "family", "trade pairs", "decided", "unanimous", "decided WORSE"] + [f"dissent {r}" for r in REFS] +
+        ["S says better, B and C worse"]))
+    for metric, label in (("a", "(a) trade-ladder inversions, adjacent rungs (registered)"),
+                          ("a2", "(a2) byte-matched inversions"),
+                          ("a_s2", "exploratory: trade pairs two rungs apart"),
+                          ("a_s4", "exploratory: trade pairs four rungs apart"),
+                          ("a_s8", "exploratory: trade pairs eight rungs apart")):
+        rows = []
+        for tf in FAMILIES:
+            for m in models:
+                c = sum_tally(result["tally"][metric], scope, part, m).get(tf)
+                if c and c["pairs"]:
+                    rows.append([tf, m, c["pairs"], c["undecided"], c["n_worse"], c["inv"], pct(c["inv"], c["n_worse"]),
+                                 c["n_better"], c["reverse"], pct(c["reverse"], c["n_better"])])
+        out.append(f"### {label}\n" + table(rows, ["family", "model", "pairs", "undecided", "decided WORSE",
+                                                      "inversions", "rate", "decided BETTER", "reverse", "rate"]))
+    rows = []
+    for tf in FAMILIES:
+        for target in models:
+            for arm in ("de", "random"):
+                enc = fin = leg = 0
+                for (view, f, t, a), cell in result["de"].items():
+                    if f == tf and t == target and a == arm and "source" in cell and (scope == "all" or cell["partition"] == scope):
+                        enc += cell["encodes"] + cell["refused"]
+                        fin += len(cell["finds"])
+                        leg += len(cell["legacy"])
+                if enc:
+                    rows.append([tf, target, arm, enc, fin, f"{1000 * fin / enc:.1f}", leg, f"{1000 * leg / enc:.1f}"])
+    out.append("### (b) DE and random finds (registered rule: two of three references; legacy = S and B)\n" + table(
+        rows, ["family", "target", "arm", "encodes", "unique finds", "per 1,000", "legacy finds", "legacy per 1,000"]))
+    rows = []
+    for tf in FAMILIES:
+        att = {mt: n for (p, f, mt), n in result["bytematch_cells"].items() if f == tf and (scope == "all" or p == scope)}
+        total = sum(att.values())
+        pairs = sum(n for (p, f, k), n in result["bm_stats"].items() if f == tf and k == "pairs" and (scope == "all" or p == scope))
+        dec = sum(n for (p, f, k), n in result["bm_stats"].items() if f == tf and k == "decided" and (scope == "all" or p == scope))
+        if total:
+            rows.append([tf, total, att.get(True, 0), pct(att.get(True, 0), total), pairs, pct(dec, pairs)])
+    out.append("### Byte-matched cells\n" + table(rows, ["family", "cells", "matched within 1%", "rate", "pairs", "decided"]))
+    rows = []
+    for (tf, ramp), vals in sorted(result["luma_gain"].items()):
+        rows.append([tf, ramp, len(vals), f"{percentile(vals, .1):.3f}", f"{percentile(vals, .5):.3f}", f"{percentile(vals, .9):.3f}"])
+    out.append("### Luma gain per trade pair (best of luma601, lumrel; dB; all partitions)\n" +
+               table(rows, ["family", "ramp", "trade pairs", "p10", "p50", "p90"]))
     return "\n\n".join(out)
+
+
+def probe_table(result):
+    rows = []
+    for tf in ("ycc444", "ycc420"):
+        by_m = defaultdict(list)
+        for (view, f), rs in result["probe"].items():
+            if f == tf:
+                for r in rs:
+                    by_m[r["chroma"]].append(r["scores"])
+        for m in sorted(by_m):
+            sc = by_m[m]
+            med = lambda k: statistics.median(x[k] for x in sc)
+            rows.append([tf, m, len(sc), f"{med('ssim2-frozen'):.1f}", f"{med('butteraugli'):.2f}", f"{med('cvvdp'):.2f}",
+                         f"{med('zensim-e'):.1f}", f"{med('chroma601-psnr'):.2f}", f"{med('luma601-psnr'):.2f}"])
+    return "### YCbCr range probe (unit luma, chroma multiplier; medians over probe views)\n" + table(
+        rows, ["family", "chroma x", "views", "S", "B", "C", "E", "chroma601 dB", "luma601 dB"])
+
+
+def top_examples(result, n=3):
+    out = []
+    for kind in ("ladder", "bytematch"):
+        for tf in FAMILIES:
+            cands = [e for e in result["examples"] if e["kind"] == kind and e["family"] == tf]
+            # strongest first: unanimous references, then the largest score excess of an inverted model
+            cands.sort(key=lambda e: (-len(e["agreeing"]), -max(e["excess"][m] for m in e["inverted"])))
+            out.extend(cands[:n])
+    return out
 
 
 def main():
@@ -277,14 +415,24 @@ def main():
     (a.out / "TALLIES.json").write_text(json.dumps(tallies_json(result, a.models), indent=1))
     (a.out / "ladders.jsonl").write_text("".join(json.dumps(r) + "\n" for r in result["ladders"]))
     (a.out / "pairs.jsonl").write_text("".join(json.dumps(r) + "\n" for r in result["pairs"]))
-    summary = dict(refused=dict(result["refused"]), agree={f"{k[0]}|{k[1]}": v for k, v in result["agree"].items()},
+    (a.out / "EXAMPLES.json").write_text(json.dumps(top_examples(result), indent=1))
+    summary = dict(refused=dict(result["refused"]),
+                   agree={"|".join(k): v for k, v in result["agree"].items()},
                    luma_gain={f"{k[0]}|{k[1]}": dict(n=len(v), median=statistics.median(v),
                                                      p10=percentile(v, .1), p90=percentile(v, .9))
-                              for k, v in result["luma_gain"].items()})
+                              for k, v in result["luma_gain"].items()},
+                   de={"|".join(k): dict(encodes=c["encodes"] + c["refused"], finds=len(c["finds"]),
+                                         legacy=len(c["legacy"]), partition=c.get("partition"))
+                       for k, c in result["de"].items() if "source" in c},
+                   bytematch_cells={"|".join(map(str, k)): v for k, v in result["bytematch_cells"].items()},
+                   bm_stats={"|".join(k): v for k, v in result["bm_stats"].items()})
     (a.out / "SUMMARY.json").write_text(json.dumps(summary, indent=1))
-    (a.out / "PILOT_TABLES.md").write_text(pilot_tables(result, a.models) + "\n")
+    parts = [pilot_tables(result, a.models, scope) for scope in ("gauntlet", "training-leg", "all")]
+    parts.append(probe_table(result))
+    (a.out / "PILOT_TABLES.md").write_text("\n\n".join(parts) + "\n")
     print(json.dumps(dict(ladders=len(result["ladders"]), pairs=len(result["pairs"]),
-                          sources=len(result["partitions"]), refused=dict(result["refused"]))))
+                          sources=len(result["partitions"]), refused=dict(result["refused"]),
+                          examples=len(result["examples"]))))
 
 
 if __name__ == "__main__":

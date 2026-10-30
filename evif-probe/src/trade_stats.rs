@@ -11,9 +11,10 @@ type PerModel = BTreeMap<String, BTreeMap<String, Counts>>;
 
 /// The two counters whose pooled ratio is the rate of a metric.
 fn counters(metric: &str) -> (&'static str, &'static str, f64) {
-    match metric {
-        "a" | "a2" => ("inv", "n_worse", 1.0),
-        _ => ("finds", "encodes", 1000.0),
+    if metric.starts_with('a') {
+        ("inv", "n_worse", 1.0)
+    } else {
+        ("finds", "encodes", 1000.0)
     }
 }
 
