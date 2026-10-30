@@ -195,6 +195,8 @@ fn future_hash_widths_round_trip_and_bind_algorithm_and_every_byte() {
     let a = asset(1, Kind::Still);
     let out = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
         .join(format!("future-hashes-{}", std::process::id()));
+    // A cached target directory can hold the directory of an earlier process that had the same id.
+    let _ = std::fs::remove_dir_all(&out);
     std::fs::create_dir(&out).unwrap();
     let make = |canonical: Hash, checks: Vec<Hash>| {
         let mut s = segment(&a, b"x");
