@@ -48,8 +48,21 @@ fn codec_bytes() -> &'static [u8] {
 }
 
 pub(crate) struct Research {
-    codec: bool,
+    label: &'static str,
+    hash: &'static str,
     metric: Res<Zensim>,
+}
+/// Candidate bakes loaded from a caller-named file; the function-pointer model hook
+/// of the pinned adapter needs one static slot per bake.
+static CANDIDATE_MODELS: [OnceLock<&'static [u8]>; 4] = [
+    OnceLock::new(),
+    OnceLock::new(),
+    OnceLock::new(),
+    OnceLock::new(),
+];
+static NEXT_CANDIDATE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+fn candidate_bytes<const N: usize>() -> &'static [u8] {
+    CANDIDATE_MODELS[N].get().expect("candidate model loaded")
 }
 impl Research {
     pub(crate) fn new(codec: bool) -> Self {
@@ -75,16 +88,58 @@ impl Research {
                 name: if codec { "rev7-codec" } else { "rev7-general" },
             })
         });
-        Self { codec, metric }
+        Self {
+            label: if codec { "zensim-e-codec" } else { "zensim-e" },
+            hash: if codec { CODEC_SHA } else { GENERAL_SHA },
+            metric,
+        }
+    }
+
+    /// A candidate bake scored through the same pinned custom-profile adapter. The bake
+    /// must match `expected_sha`; a bake the adapter cannot serve fails at its first score.
+    pub(crate) fn candidate(label: &str, path: &str, expected_sha: &str) -> Self {
+        let label: &'static str = Box::leak(label.to_string().into_boxed_str());
+        let hash: &'static str = Box::leak(expected_sha.to_string().into_boxed_str());
+        let metric = (|| -> Res<Zensim> {
+            let bytes = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
+            if sha(&bytes) != expected_sha {
+                return Err(format!("{path}: expected model SHA256 {expected_sha}"));
+            }
+            let slot = NEXT_CANDIDATE.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let getter: fn() -> &'static [u8] = match slot {
+                0 => candidate_bytes::<0>,
+                1 => candidate_bytes::<1>,
+                2 => candidate_bytes::<2>,
+                3 => candidate_bytes::<3>,
+                _ => return Err("at most four candidate bakes".into()),
+            };
+            CANDIDATE_MODELS[slot]
+                .set(Box::leak(bytes.into_boxed_slice()))
+                .map_err(|_| "candidate slot reused".to_string())?;
+            let params: &'static ProfileParams = Box::leak(Box::new(
+                ProfileParams::builder()
+                    .skip_score_mapping(true)
+                    .mlp(getter)
+                    .extended_features(true)
+                    .compute_iw_features(true)
+                    .extrapolate_score(true)
+                    .build(),
+            ));
+            Ok(Zensim::new(ZensimProfile::Custom {
+                params,
+                name: label,
+            }))
+        })();
+        Self {
+            label,
+            hash,
+            metric,
+        }
     }
 }
 impl Judge for Research {
     fn name(&self) -> &'static str {
-        if self.codec {
-            "zensim-e-codec"
-        } else {
-            "zensim-e"
-        }
+        self.label
     }
     fn keys(&self) -> Vec<String> {
         vec![self.name().into()]
@@ -97,7 +152,7 @@ impl Judge for Research {
             .compute(&r, &d)
             .map_err(|e| format!("research zensim: {e}"))?
             .score();
-        let hash = if self.codec { CODEC_SHA } else { GENERAL_SHA };
+        let hash = self.hash;
         Ok(vec![
             Score::new(self.name(), value, Better::Higher)
                 .version("0.3.0")
@@ -141,13 +196,43 @@ impl Judge for MappedButteraugli {
         vec!["butteraugli".into(), "butteraugli/3-norm".into()]
     }
     fn score(&self, r: &Rgb8Image, d: &Rgb8Image) -> Res<Vec<Score>> {
-        use std::io::Write;
-        let result = butteraugli::butteraugli(
-            r.imgref(),
-            d.imgref(),
-            &butteraugli::ButteraugliParams::default().with_compute_diffmap(true),
-        )
-        .map_err(|e| format!("butteraugli map: {e}"))?;
+        butteraugli_scores(Some(&self.0), r, d)
+    }
+}
+
+/// Butteraugli whose native map is written only while the shared gate is set.
+#[cfg(feature = "trade")]
+pub(crate) struct GatedButteraugli {
+    pub(crate) maps: std::path::PathBuf,
+    pub(crate) gate: std::rc::Rc<std::cell::Cell<bool>>,
+}
+#[cfg(feature = "trade")]
+impl Judge for GatedButteraugli {
+    fn name(&self) -> &'static str {
+        "butteraugli"
+    }
+    fn keys(&self) -> Vec<String> {
+        vec!["butteraugli".into(), "butteraugli/3-norm".into()]
+    }
+    fn score(&self, r: &Rgb8Image, d: &Rgb8Image) -> Res<Vec<Score>> {
+        butteraugli_scores(self.gate.get().then_some(self.maps.as_path()), r, d)
+    }
+}
+
+fn butteraugli_scores(
+    maps: Option<&std::path::Path>,
+    r: &Rgb8Image,
+    d: &Rgb8Image,
+) -> Res<Vec<Score>> {
+    use std::io::Write;
+    let result = butteraugli::butteraugli(
+        r.imgref(),
+        d.imgref(),
+        &butteraugli::ButteraugliParams::default().with_compute_diffmap(maps.is_some()),
+    )
+    .map_err(|e| format!("butteraugli map: {e}"))?;
+    let mut diffmap = None;
+    if let Some(dir) = maps {
         let map = result.diffmap.as_ref().ok_or("butteraugli map absent")?;
         let mut key = Sha256::new();
         key.update(r.width.to_le_bytes());
@@ -164,7 +249,7 @@ impl Judge for MappedButteraugli {
                 bytes.extend_from_slice(&value.to_le_bytes());
             }
         }
-        let path = self.0.join(&name);
+        let path = dir.join(&name);
         match std::fs::OpenOptions::new()
             .create_new(true)
             .write(true)
@@ -178,16 +263,19 @@ impl Judge for MappedButteraugli {
             }
             Err(e) => return Err(e.to_string()),
         }
-        let tag = |mut s: Score| {
-            s.extra.insert("diffmap".into(), serde_json::json!({"path":format!("maps/{name}"),
-                "sha256":sha(&bytes),"reference_pixels_sha256":sha(&r.data),"distorted_pixels_sha256":sha(&d.data),
-                "format":"PFM grayscale f32 little endian bottom-to-top","width":r.width,"height":r.height}));
-            s.version(crate::pins::BUTTERAUGLI.version)
-                .implementation(crate::pins::BUTTERAUGLI.implementation("butteraugli"))
-        };
-        Ok(vec![
-            tag(Score::new("butteraugli", result.score, Better::Lower)),
-            tag(Score::new("butteraugli", result.pnorm_3, Better::Lower).variant("3-norm")),
-        ])
+        diffmap = Some(serde_json::json!({"path":format!("maps/{name}"),
+            "sha256":sha(&bytes),"reference_pixels_sha256":sha(&r.data),"distorted_pixels_sha256":sha(&d.data),
+            "format":"PFM grayscale f32 little endian bottom-to-top","width":r.width,"height":r.height}));
     }
+    let tag = |mut s: Score| {
+        if let Some(m) = &diffmap {
+            s.extra.insert("diffmap".into(), m.clone());
+        }
+        s.version(crate::pins::BUTTERAUGLI.version)
+            .implementation(crate::pins::BUTTERAUGLI.implementation("butteraugli"))
+    };
+    Ok(vec![
+        tag(Score::new("butteraugli", result.score, Better::Lower)),
+        tag(Score::new("butteraugli", result.pnorm_3, Better::Lower).variant("3-norm")),
+    ])
 }

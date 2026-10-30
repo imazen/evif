@@ -351,6 +351,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "cvvdp"
+version = "0.1.0"
+source = "git+https://github.com/imazen/zenmetrics?rev=0a61830db89a768ab9462f166d1412e948e4efa9#0a61830db89a768ab9462f166d1412e948e4efa9"
+dependencies = [
+ "archmage 0.9.30",
+ "magetypes 0.9.30",
+ "serde_json",
+]
+
+[[package]]
 name = "digest"
 version = "0.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -420,6 +430,7 @@ dependencies = [
  "almost-enough",
  "butteraugli",
  "corruption-corpus",
+ "cvvdp",
  "enough",
  "evif",
  "fast-ssim2 0.8.2",

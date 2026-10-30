@@ -31,37 +31,40 @@ struct Spec {
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct View {
-    id: String,
-    source: String,
-    source_path: PathBuf,
-    source_sha256: String,
-    class: String,
-    content_class: String,
-    split: String,
-    path: PathBuf,
-    sha256: String,
+pub(crate) struct View {
+    pub(crate) id: String,
+    pub(crate) source: String,
+    pub(crate) source_path: PathBuf,
+    pub(crate) source_sha256: String,
+    pub(crate) class: String,
+    pub(crate) content_class: String,
+    pub(crate) split: String,
+    /// Inherited source role (fit, new-train, dev, calibration); empty in the chroma pilot.
+    #[serde(default)]
+    pub(crate) role: String,
+    pub(crate) path: PathBuf,
+    pub(crate) sha256: String,
     /// Family -> admitted ladder vectors, normalized to [0,1].
-    seeds: BTreeMap<String, Vec<Vec<f64>>>,
+    pub(crate) seeds: BTreeMap<String, Vec<Vec<f64>>>,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Control {
-    reference: PathBuf,
-    distorted: PathBuf,
-    expected: f64,
-    reference_pixels_sha256: String,
-    distorted_pixels_sha256: String,
+pub(crate) struct Control {
+    pub(crate) reference: PathBuf,
+    pub(crate) distorted: PathBuf,
+    pub(crate) expected: f64,
+    pub(crate) reference_pixels_sha256: String,
+    pub(crate) distorted_pixels_sha256: String,
 }
 
-fn save(path: impl AsRef<Path>, value: &(impl Serialize + ?Sized)) -> Res<()> {
+pub(crate) fn save(path: impl AsRef<Path>, value: &(impl Serialize + ?Sized)) -> Res<()> {
     fs::write(
         path,
         serde_json::to_vec_pretty(value).map_err(|e| e.to_string())?,
     )
     .map_err(|e| e.to_string())
 }
-fn image(path: &Path) -> Res<Rgb8Image> {
+pub(crate) fn image(path: &Path) -> Res<Rgb8Image> {
     Rgb8Image::from_png(&fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?)
 }
 fn margin(gains: &BTreeMap<String, f64>, target: &str) -> Res<f64> {
@@ -77,7 +80,7 @@ fn margin(gains: &BTreeMap<String, f64>, target: &str) -> Res<f64> {
 }
 
 /// DE/rand/1/bin on a bounded normalized cube; random and DE share initialization.
-struct Proposals {
+pub(crate) struct Proposals {
     rng: Rng,
     population: Vec<(Vec<f64>, f64)>,
     cursor: usize,
@@ -85,7 +88,7 @@ struct Proposals {
     optimize: bool,
 }
 impl Proposals {
-    fn new(seed: u64, key: &str, dimension: usize, optimize: bool) -> Self {
+    pub(crate) fn new(seed: u64, key: &str, dimension: usize, optimize: bool) -> Self {
         Self {
             rng: Rng::for_key(seed, key),
             population: Vec::new(),
@@ -94,7 +97,7 @@ impl Proposals {
             optimize,
         }
     }
-    fn next(&mut self, seeds: &[Vec<f64>]) -> Vec<f64> {
+    pub(crate) fn next(&mut self, seeds: &[Vec<f64>]) -> Vec<f64> {
         if self.cursor < seeds.len().min(2) {
             return seeds[self.cursor].clone();
         }
@@ -121,7 +124,7 @@ impl Proposals {
             })
             .collect()
     }
-    fn observe(&mut self, vector: Vec<f64>, score: f64) {
+    pub(crate) fn observe(&mut self, vector: Vec<f64>, score: f64) {
         if self.population.len() < 6 {
             self.population.push((vector, score));
         } else {
@@ -178,7 +181,7 @@ fn params(family: &dyn Family, x: &[f64]) -> Res<Value> {
     Ok(p)
 }
 
-fn replay(controls: &[Control], out: &Path) -> Res<()> {
+pub(crate) fn replay(controls: &[Control], out: &Path) -> Res<()> {
     if controls.len() != 4 {
         return Err("exactly four frozen teacher controls required".into());
     }

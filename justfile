@@ -46,6 +46,26 @@ adversarial-local-mirror-check archive receipt mirror output:
 adversarial-r2-mirror-check archive receipt signed_url_file output:
     {{heavy}} python3 tools/adversarial_mirror.py '{{archive}}' '{{receipt}}' '{{output}}' --signed-url-file '{{signed_url_file}}'
 
+# Trade ladders, byte-matched pairs and the DE trade search (feature `trade`).
+trade-check:
+    cargo fmt -p evif -p evif-probe --check
+    {{heavy}} cargo clippy -p evif-probe --features trade --all-targets -- -D warnings
+    {{heavy}} cargo test -p evif-probe --features trade --lib
+    PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools -p 'test_trade*.py' -v
+
+trade-build:
+    {{heavy}} cargo build --release -p evif-probe --features trade
+
+# Specs come from the frozen view list and the stored controls (tools/trade_controls.py).
+trade-prepare pilot controls output commit *args:
+    python3 tools/trade_prepare.py '{{pilot}}' '{{controls}}' '{{output}}' --build-commit '{{commit}}' {{args}}
+
+trade-run spec output:
+    {{heavy}} target/release/evif trade '{{spec}}' '{{output}}'
+
+trade-gate run *args:
+    python3 tools/trade_gate.py '{{run}}' {{args}}
+
 build:
     {{heavy}} cargo build --release
 

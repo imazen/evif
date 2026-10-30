@@ -21,4 +21,8 @@ pub type Res<T> = Result<T, String>;
 mod adversarial;
 #[cfg(feature = "adversarial")]
 mod adversarial_judges;
+#[cfg(feature = "trade")]
+mod trade;
+#[cfg(feature = "trade")]
+mod trade_judges;
 mod wire_cli;
