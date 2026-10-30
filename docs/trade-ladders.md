@@ -158,3 +158,13 @@ butteraugli judges replay stored diagnostic doubles for a fixed set of cells, an
 reproduces the encoded bytes of fixed chroma-only cells. A failed control refuses the run. Every sample
 is an `.evif` with the decoded pixels, recipe, original bytes and all scores; butteraugli and CVVDP
 maps are kept for ladder end points, byte-matched cells, finds and a 5 % stable hash sample.
+
+## Amendment 2026-10-30 (before the pilot run)
+
+A two-view smoke run (1,412 samples, no gate figure taken from it) checked the controls and the runner
+before the pilot. It showed `luma601-psnr` falling along the XYB ladders while the quantized luma channel
+gets finer: XYB codes opsin Y rather than BT.601 luma, and chroma error leaks into the BT.601 plane. The
+trade-pair definition above would drop most XYB pairs. Amended definition: a trade pair is two adjacent
+rungs of a ramp other than `none` where `luma601-psnr` or `lumrel-psnr` rises by at least 0.02 dB and
+`chroma601-psnr` falls by at least 0.02 dB. The margins, the vote rule, the find rule and the gate are
+unchanged. The smoke views stay in the pilot set; their smoke ledger is not used for any gate figure.
