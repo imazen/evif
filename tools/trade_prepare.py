@@ -43,7 +43,8 @@ def main():
     views = [dict(v, seeds={}) for k, v in enumerate(views) if k % n == i]
     probe = [v for v in a.probe_views if v in {x["id"] for x in views}]
     spec = dict(build_commit=a.build_commit, seed=a.seed, views=views, controls=pilot["controls"],
-                metric_controls=controls["metric_controls"], byte_controls=controls["byte_controls"],
+                metric_controls=controls["metric_controls"],
+                byte_controls=[c for c in controls["byte_controls"] if c["family"] in a.families],
                 families=a.families, ramps=a.ramps, kinds=a.kinds, targets=a.targets if "de" in a.kinds else [],
                 de_samples=a.de_samples, budgets=a.budgets if "bytematch" in a.kinds else [],
                 map_sample_mod=a.map_sample_mod, probe_views=probe,

@@ -75,8 +75,9 @@ def byte_controls(args):
                 continue
             for rung in args.byte_rungs:
                 cell = next(c for c in ladder["cells"] if int(c["rung"]) == rung)
-                result.append(dict(view=view, family=family, ramp="none", rung=rung,
-                                   encoded_sha256=cell["encode_sha256"]))
+                path = Path(args.views[view]["path"])
+                result.append(dict(reference=str(path), reference_sha256=sha(path.read_bytes()), family=family,
+                                   ramp="none", rung=rung, encoded_sha256=cell["encode_sha256"]))
     return result
 
 
@@ -93,6 +94,7 @@ def main():
     args = p.parse_args()
     spec = json.loads(args.pilot_spec.read_text())
     views = {v["id"]: v for v in spec["views"]}
+    args.views = views
     result = dict(metric_controls=metric_controls(args, views), byte_controls=byte_controls(args),
                   diagnostics_sha256=sha(args.diagnostics.read_bytes()))
     with args.out.open("x") as f:

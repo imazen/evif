@@ -410,7 +410,9 @@ struct MetricControl {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ByteControl {
-    view: String,
+    reference: PathBuf,
+    /// SHA-256 of the PNG file bytes.
+    reference_sha256: String,
     family: String,
     ramp: String,
     rung: usize,
@@ -603,21 +605,24 @@ fn byte_controls(
 ) -> Res<()> {
     let mut rows = Vec::new();
     for c in &spec.byte_controls {
-        let v = spec
-            .views
-            .iter()
-            .find(|v| v.id == c.view)
-            .ok_or_else(|| format!("byte control view {} absent", c.view))?;
         let tf = Tf::parse(&c.family)?;
         let fam = codec_families
             .get(tf.codec_family())
             .ok_or("byte control family not configured")?;
-        let reference = image(&v.path)?;
+        let bytes =
+            fs::read(&c.reference).map_err(|e| format!("{}: {e}", c.reference.display()))?;
+        if sha(&bytes) != c.reference_sha256 {
+            return Err(format!(
+                "byte control reference differs: {}",
+                c.reference.display()
+            ));
+        }
+        let reference = Rgb8Image::from_png(&bytes)?;
         let params = tf.ladder(fam.as_ref(), Ramp::parse(&c.ramp)?, c.rung)?;
         let enc = fam.encode(&params, &reference)?;
         let got = sha(&enc.bits.as_ref().ok_or("real encode bytes required")?.data);
         rows.push(
-            json!({"view":c.view,"family":c.family,"ramp":c.ramp,"rung":c.rung,
+            json!({"reference":c.reference,"family":c.family,"ramp":c.ramp,"rung":c.rung,
             "expected":c.encoded_sha256,"actual":got,"pass":got == c.encoded_sha256}),
         );
     }
