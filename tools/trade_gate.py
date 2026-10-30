@@ -150,6 +150,8 @@ def analyse(rows, models):
         rs.sort(key=lambda r: r["rung"])
         source = rs[0]["source"]
         trade_pairs = 0
+        worse_pairs = 0
+        inverted_pairs = Counter()
         scores_s = [r["scores"]["ssim2-frozen"] for r in rs]
         kept, stop = admission(scores_s)
         for a, b in zip(rs, rs[1:]):
@@ -163,6 +165,9 @@ def analyse(rows, models):
             if not is_trade:
                 continue
             trade_pairs += 1
+            worse_pairs += t == "WORSE"
+            for m, f in flags.items():
+                inverted_pairs[m] += f == "inversion"
             luma_gain[(tf, ramp)].append(max(deltas["luma601"], deltas["lumrel"]))
             part = a["partition"]
             for scope in (part, "all"):
@@ -208,6 +213,7 @@ def analyse(rows, models):
         first, last = rs[0], rs[-1]
         ladder_rows.append(dict(view=view, source=source, partition=rs[0]["partition"], family=tf, ramp=ramp,
                                 rungs=len(rs), trade_pairs=trade_pairs, admitted=trade_pairs >= 3, kept=len(kept),
+                                worse_pairs=worse_pairs, inverted_pairs=dict(inverted_pairs),
                                 stop=stop, depth_past_stop=(len(rs) - 1 - stop) if stop is not None else 0,
                                 chroma_at_stop=rs[stop]["chroma"] if stop is not None else None,
                                 chroma_last=last["chroma"],
@@ -323,6 +329,21 @@ def pilot_tables(result, models, scope="all"):
     out.append("### Ladders (admitted = at least three trade pairs)\n" + table(rows, [
         "family", "ramp", "ladders", "admitted", "median luma601 gain dB", "median lumrel gain dB",
         "median chroma601 loss dB", "median rungs past chroma-only stop", "ladders past stop", "ladders with a stop"]))
+    rows = []
+    for tf in FAMILIES:
+        ls = [r for r in lad if r["family"] == tf and r["ramp"] != "none"]
+        if not ls:
+            continue
+        with_worse = [r for r in ls if r["worse_pairs"] > 0]
+        admitted = [r for r in ls if r["admitted"]]
+        row = [tf, len(ls), len(admitted), len(with_worse)]
+        for m in models:
+            hit = sum(1 for r in with_worse if r["inverted_pairs"].get(m, 0) > 0)
+            row.append(f"{hit} ({pct(hit, len(with_worse))})")
+        rows.append(row)
+    out.append("### Ladders on which a model inverts (ramps other than none; share of ladders with a decided-WORSE trade pair)\n" +
+               table(rows, ["family", "ladders", "admitted", "with a decided-WORSE trade pair"] +
+                     [f"{m} inverts" for m in models]))
     rows = []
     for tf in FAMILIES:
         c = result["agree"]

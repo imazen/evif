@@ -94,6 +94,17 @@ class Ladders(unittest.TestCase):
         self.assertEqual(tally["inv"], 1)
         self.assertEqual(tally["undecided"], 1)
 
+    def test_ladder_rows_count_decided_worse_pairs_and_the_pairs_each_model_inverts(self):
+        rows = [self.row(0), self.row(1, s=70.0, b=4.0, e=81.0, **{"luma601-psnr": 41.0, "chroma601-psnr": 35.0}),
+                self.row(2, s=50.0, b=9.0, e=60.0, **{"luma601-psnr": 42.0, "chroma601-psnr": 30.0})]
+        result = g.analyse(iter(rows), ["zensim-e"])
+        [ladder] = result["ladders"]
+        # 0->1: references worse, model higher (inversion). 1->2: S and B worse again, model lower (ok).
+        self.assertEqual((ladder["trade_pairs"], ladder["worse_pairs"]), (2, 2))
+        self.assertEqual(ladder["inverted_pairs"], {"zensim-e": 1})
+        table = g.pilot_tables(result, ["zensim-e"], scope="gauntlet")
+        self.assertIn("| ycc420 | 1 | 0 | 1 | 1 (100.0%) |", table)
+
     def test_de_finds_deduplicate_by_encoded_bytes_and_count_refusals_in_the_budget(self):
         base = dict(kind="de", view="v", source="src", partition="gauntlet", trade_family="ycc420", target="zensim-e",
                     arm="de", scores=scores(), bytes=1, find=True, legacy_find=False, margin=0.7)
