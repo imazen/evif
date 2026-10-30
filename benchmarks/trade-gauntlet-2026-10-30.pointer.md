@@ -1,8 +1,19 @@
 # Trade ladders, gauntlet grid and pilot, 2026-10-30: data pointer
 
-MISSING: the verified tower mirror (copy in progress; this line is replaced when the mirror's count, byte total and 40-file
-SHA-256 sample have been checked) and the training-leg partition (running). The summary is
+MISSING: the training-leg partition (running; its store and mirror are not part of this pointer yet). The summary is
 [trade-gauntlet-2026-10-30.md](trade-gauntlet-2026-10-30.md).
+
+**Tower mirror (array disk, not the share's cache), verified 2026-10-30:** each tree was copied by one tar stream, then its
+file count, byte total and a 40-file SHA-256 sample were compared with the source. Root
+`output/evif-chroma-trade-archive-2026-10-30/` on the NAS array disk 1:
+
+| tree | files | bytes |
+|---|---|---|
+| `gauntlet-cas/` (the store below) | 29,572 | 306,727,382,641 |
+| `gauntlet-assembled/` (per-job ledgers and receipts) | 27,551 | 3,690,768,247 |
+| `gate-gauntlet/` (result files named below) | 6 | 302,623,508 |
+| `pilot-r3800x/` (pilot shards 00-03 and 08-13) | 215,325 | 73,341,625,050 |
+| `pilot-i270/` (pilot shards 04-07) | 84,451 | 30,368,832,825 |
 
 - **Gauntlet grid** (2,755 jobs over 1,691 views, 173 sources): content-addressed store on r3800x,
   `~/chromatrade-data/grid-cas/<aa>/<bb>/<sha256>` (29,572 files, 285 GiB). Each job's `result.json` names its ledger,
