@@ -473,6 +473,12 @@ struct Spec {
     /// `bitstream`: DE samples that are not finds keep only their encoded bytes and ledger row.
     #[serde(default)]
     persist_de_non_find: Option<String>,
+    /// Native maps for the two end points of every ladder; on by default.
+    #[serde(default = "yes")]
+    ladder_end_maps: bool,
+    /// Native maps for byte-matched cells; on by default.
+    #[serde(default = "yes")]
+    bytematch_maps: bool,
 }
 
 fn merge(mut a: Value, b: Value) -> Value {
@@ -948,7 +954,8 @@ fn process_view(
                     };
                     let name = format!("{}-ladder-{}-r{k:02}", tf.id(), ramp.id());
                     let ends = k == 0 || k + 1 == tf.rungs();
-                    let maps = ends || stable_sample(&vx.view.id, &name, spec.map_sample_mod);
+                    let maps = (ends && spec.ladder_end_maps)
+                        || stable_sample(&vx.view.id, &name, spec.map_sample_mod);
                     let s = r.score(vx, fam, Some(baseline), params, &enc, maps)?;
                     let file = r.write_evif(vx, fam, None, &s, &enc, &name, &head)?;
                     r.row(vx, head, &s, &enc, &file)?;
@@ -980,7 +987,14 @@ fn process_view(
                         json!({"matched":m.matched,"rate_quality":m.quality,"evals":m.evals}),
                     );
                     let name = format!("{}-bm-q{bq:03}-rho{rho}", tf.id());
-                    let s = r.score(vx, fam, Some(baseline), m.params, &m.enc, true)?;
+                    let s = r.score(
+                        vx,
+                        fam,
+                        Some(baseline),
+                        m.params,
+                        &m.enc,
+                        spec.bytematch_maps,
+                    )?;
                     let file = r.write_evif(vx, fam, None, &s, &m.enc, &name, &head)?;
                     r.row(vx, head, &s, &m.enc, &file)?;
                 }

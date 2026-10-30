@@ -96,7 +96,7 @@ class Ladders(unittest.TestCase):
 
     def test_de_finds_deduplicate_by_encoded_bytes_and_count_refusals_in_the_budget(self):
         base = dict(kind="de", view="v", source="src", partition="gauntlet", trade_family="ycc420", target="zensim-e",
-                    arm="de", scores=scores(), bytes=1, find=True, legacy_find=False)
+                    arm="de", scores=scores(), bytes=1, find=True, legacy_find=False, margin=0.7)
         rows = [dict(base, index=0, encoded_sha256="x"), dict(base, index=1, encoded_sha256="x"),
                 dict(base, index=2, encoded_sha256="y", find=False),
                 dict(kind="de", view="v", source="src", partition="gauntlet", trade_family="ycc420",

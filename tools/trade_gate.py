@@ -104,7 +104,7 @@ def analyse(rows, models):
     """Walk the ledger once; return tallies and the descriptive tables."""
     ladders = defaultdict(list)
     bytematch = defaultdict(list)
-    de = defaultdict(lambda: dict(encodes=0, refused=0, finds=set(), legacy=set()))
+    de = defaultdict(lambda: dict(encodes=0, refused=0, finds=set(), legacy=set(), strong05=set(), strong10=set()))
     probe = defaultdict(list)
     refused = Counter()
     bytematch_cells = Counter()
@@ -132,6 +132,10 @@ def analyse(rows, models):
                 cell["finds"].add(r["encoded_sha256"])
             if r["legacy_find"]:
                 cell["legacy"].add(r["encoded_sha256"])
+            if r["margin"] > 0.5:
+                cell["strong05"].add(r["encoded_sha256"])
+            if r["margin"] > 1.0:
+                cell["strong10"].add(r["encoded_sha256"])
         elif kind == "probe":
             probe[(r["view"], r["trade_family"])].append(r)
 
@@ -349,16 +353,20 @@ def pilot_tables(result, models, scope="all"):
     for tf in FAMILIES:
         for target in models:
             for arm in ("de", "random"):
-                enc = fin = leg = 0
+                enc = fin = leg = s05 = s10 = 0
                 for (view, f, t, a), cell in result["de"].items():
                     if f == tf and t == target and a == arm and "source" in cell and (scope == "all" or cell["partition"] == scope):
                         enc += cell["encodes"] + cell["refused"]
                         fin += len(cell["finds"])
                         leg += len(cell["legacy"])
+                        s05 += len(cell["strong05"])
+                        s10 += len(cell["strong10"])
                 if enc:
-                    rows.append([tf, target, arm, enc, fin, f"{1000 * fin / enc:.1f}", leg, f"{1000 * leg / enc:.1f}"])
-    out.append("### (b) DE and random finds (registered rule: two of three references; legacy = S and B)\n" + table(
-        rows, ["family", "target", "arm", "encodes", "unique finds", "per 1,000", "legacy finds", "legacy per 1,000"]))
+                    rows.append([tf, target, arm, enc, fin, f"{1000 * fin / enc:.1f}", leg, f"{1000 * leg / enc:.1f}",
+                                 f"{1000 * s05 / enc:.1f}", f"{1000 * s10 / enc:.1f}"])
+    out.append("### (b) DE and random finds (registered rule: two of three references; legacy = S and B; strong = margin above 0.5 / 1.0 log2 bytes)\n" + table(
+        rows, ["family", "target", "arm", "encodes", "unique finds", "per 1,000", "legacy finds", "legacy per 1,000",
+               "strong>0.5 per 1,000", "strong>1.0 per 1,000"]))
     rows = []
     for tf in FAMILIES:
         att = {mt: n for (p, f, mt), n in result["bytematch_cells"].items() if f == tf and (scope == "all" or p == scope)}
@@ -422,7 +430,8 @@ def main():
                                                      p10=percentile(v, .1), p90=percentile(v, .9))
                               for k, v in result["luma_gain"].items()},
                    de={"|".join(k): dict(encodes=c["encodes"] + c["refused"], finds=len(c["finds"]),
-                                         legacy=len(c["legacy"]), partition=c.get("partition"))
+                                         legacy=len(c["legacy"]), strong05=len(c["strong05"]),
+                                         strong10=len(c["strong10"]), partition=c.get("partition"))
                        for k, c in result["de"].items() if "source" in c},
                    bytematch_cells={"|".join(map(str, k)): v for k, v in result["bytematch_cells"].items()},
                    bm_stats={"|".join(k): v for k, v in result["bm_stats"].items()})

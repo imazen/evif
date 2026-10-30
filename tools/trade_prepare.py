@@ -33,6 +33,8 @@ def main():
     p.add_argument("--persist-training-leg", choices=["evif", "bitstream"], default="evif")
     p.add_argument("--no-find-maps", action="store_true")
     p.add_argument("--persist-de-non-find", choices=["evif", "bitstream"], default="evif")
+    p.add_argument("--no-ladder-end-maps", action="store_true")
+    p.add_argument("--no-bytematch-maps", action="store_true")
     p.add_argument("--shard", default="0/1")
     p.add_argument("--balanced-shards", type=int, help="write OUTPUT-shard-NN.json, largest views first")
     a = p.parse_args()
@@ -56,7 +58,8 @@ def main():
                     map_sample_mod=a.map_sample_mod, probe_views=[v for v in a.probe_views if v in keep],
                     candidates=json.loads(a.candidates.read_text()) if a.candidates else [],
                     persist_training_leg=a.persist_training_leg, find_maps=not a.no_find_maps,
-                    persist_de_non_find=a.persist_de_non_find)
+                    persist_de_non_find=a.persist_de_non_find, ladder_end_maps=not a.no_ladder_end_maps,
+                    bytematch_maps=not a.no_bytematch_maps)
 
     def write(path, spec):
         with path.open("x") as f:
