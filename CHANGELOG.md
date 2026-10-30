@@ -36,6 +36,8 @@ All notable changes to this repository. Format: [Keep a Changelog](https://keepa
 ## Workspace
 
 ### Added
+- Registered the [trade-ladder design, three-reference truth rule and G-TRADE gate](docs/trade-ladders.md)
+  before any trade sample was scored.
 - Opt-in revision-7 E/ECodec and frozen SafeSyn teacher judges, equal-budget
   differential-evolution/random chroma search, source partitions, scored EVIF
   retention, native butteraugli maps, and authenticated pilot/readback tools

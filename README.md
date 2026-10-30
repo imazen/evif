@@ -73,6 +73,8 @@ Disagreement is not ground truth: it says the metrics differ, not which one is w
 The written files are the pairs worth showing to people. Random search is a floor;
 the opt-in [adversarial chroma pilot](docs/adversarial-pilot.md) compares it with
 differential evolution using the revision-7 E/ECodec profiles and two references.
+[Trade ladders](docs/trade-ladders.md) add the cases where luma gets slightly better while
+chroma collapses, with a registered three-reference truth rule.
 
 ## Quick start
 
