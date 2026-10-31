@@ -49,7 +49,13 @@ equivalent-bitrate gain of the model minus that of the reference.
 | family | long edge | SSIMULACRA2 | butteraugli max | CVVDP | E |
 |---|---|---|---|---|---|
 | ycc444 | 32 / 64 / 128 / 960 | 93.8 / 93.2 / 93.8 / 91.6 | 0.52 / 0.63 / 0.72 / 0.94 | 10.00 | 93.1 / 93.3 / 92.6 / 91.6 |
+| ycc420 | 32 / 64 / 128 / 960 | 77.9 / 74.3 / 89.9 / 89.1 | 0.76 / 0.88 / 0.94 / 1.30 | 9.97 / 9.97 / 9.98 / 9.99 | 86.6 / 88.0 / 88.4 / 88.7 |
 | xyb-extended | 32 / 64 / 128 / 960 | 78.4 / 73.9 / 92.4 / 90.9 | 0.51 / 0.63 / 0.73 / 0.95 | 9.99 | 91.0 / 91.7 / 91.3 / 90.7 |
+| xyb-capped | 32 / 64 / 128 / 960 | 78.4 / 73.9 / 92.4 / 90.9 | 0.51 / 0.63 / 0.73 / 0.95 | 9.99 | 91.0 / 91.7 / 91.3 / 90.7 |
+| svt-420 | 32 / 64 / 128 / 960 | 78.3 / 74.2 / 91.6 / 90.1 | 0.54 / 0.69 / 0.80 / 1.23 | 9.97 / 9.97 / 9.98 / 9.99 | 87.7 / 88.7 / 89.0 / 89.5 |
+
+SSIMULACRA2 steps down by 15.6 to 18.5 points between 128 px and 64 px for every family that subsamples chroma (ycc420, svt-420 and
+both XYB families) and does not for ycc444; butteraugli, CVVDP and E show no such step for any family.
 
 ## Checks
 

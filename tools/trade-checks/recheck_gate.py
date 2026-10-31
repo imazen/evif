@@ -1,7 +1,7 @@
 # Independent re-implementation of the registered (a) metric, written from the record text only (no import of
 # trade_gate.py). Includes the 2026-10-30 amendment: on views with a long edge of 64 px or less (cap in the view id)
 # SSIMULACRA2 does not vote, so butteraugli and CVVDP must both vote worse.
-# usage: recheck_gate.py DIR   (DIR/shard-*/ledger.jsonl)
+# usage: recheck_gate.py DIR   (DIR/*/ledger.jsonl)
 import json, glob, collections, re, sys
 MARG = {"ssim2-frozen": 1.0, "butteraugli": 0.5, "cvvdp": 0.25}
 MODELS = ("zensim-e", "zensim-e-codec", "zensim-f", "zensim-f-codec")
@@ -24,7 +24,7 @@ def small(view):
 
 
 rows = collections.defaultdict(list)
-for f in glob.glob(sys.argv[1] + "/shard-*/ledger.jsonl"):
+for f in glob.glob(sys.argv[1] + "/*/ledger.jsonl"):
     for line in open(f):
         r = json.loads(line)
         if r.get("kind") == "ladder" and "refused" not in r and r["ramp"] != "none":
